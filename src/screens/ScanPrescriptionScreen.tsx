@@ -33,7 +33,7 @@ export default function ScanPrescriptionScreen({ navigation }: Props) {
     const prescriptionsList = healthStore.getPrescriptions();
     
     if (plan === 'free') {
-      if (prescriptionsList.length >= 1) {
+      if (prescriptionsList.length >= 10) {
         navigation.navigate('UpgradePlan');
         return false;
       }

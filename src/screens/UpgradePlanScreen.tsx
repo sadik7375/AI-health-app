@@ -99,8 +99,8 @@ export default function UpgradePlanScreen({ navigation }: Props) {
           <View style={styles.divider} />
 
           <View style={styles.featureList}>
-            <FeatureRow text="1 Prescription Scan (Lifetime limit)" active />
-            <FeatureRow text="1 Lab Report Scan (Lifetime limit)" active />
+            <FeatureRow text="10 Prescription Scans per account" active />
+            <FeatureRow text="10 Lab Report Scans per account" active />
             <FeatureRow text="Active Medicine Reminders" active />
             <FeatureRow text="Prescription Document History" active />
             <FeatureRow text="Unlimited Manual Appointments" active />
