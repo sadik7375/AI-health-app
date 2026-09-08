@@ -14,6 +14,8 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { useAuth } from '../context/AuthContext';
+import { healthStore } from '../store/healthStore';
 
 const { width } = Dimensions.get('window');
 
@@ -24,9 +26,52 @@ interface Props {
 }
 
 export default function ScanPrescriptionScreen({ navigation }: Props) {
+  const { user } = useAuth();
+
+  const checkScanLimit = () => {
+    const plan = user?.plan_tier?.toLowerCase() ?? 'free';
+    const prescriptionsList = healthStore.getPrescriptions();
+    
+    if (plan === 'free') {
+      if (prescriptionsList.length >= 1) {
+        navigation.navigate('UpgradePlan');
+        return false;
+      }
+    } else if (plan === 'basic' || plan === 'pro') {
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      const monthlyScans = prescriptionsList.filter(p => {
+        const pDate = new Date(p.date);
+        return pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear;
+      }).length;
+
+      if (monthlyScans >= 10) {
+        navigation.navigate('UpgradePlan');
+        return false;
+      }
+    } else if (plan === 'premium' || plan === 'family') {
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      const monthlyScans = prescriptionsList.filter(p => {
+        const pDate = new Date(p.date);
+        return pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear;
+      }).length;
+
+      if (monthlyScans >= 30) {
+        Alert.alert(
+          'Monthly Limit Reached',
+          'Premium plan is limited to 30 prescription scans per month.',
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+    }
+    return true;
+  };
   
   // Request Camera & Library Permissions
   const takePhoto = async () => {
+    if (!checkScanLimit()) return;
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
@@ -49,6 +94,7 @@ export default function ScanPrescriptionScreen({ navigation }: Props) {
   };
 
   const chooseFromGallery = async () => {
+    if (!checkScanLimit()) return;
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {

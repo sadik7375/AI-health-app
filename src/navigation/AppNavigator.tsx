@@ -64,22 +64,14 @@ const screenOpts = {
 };
 
 // ── Guest Stack (not logged in) ──────────────────────────────
-function GuestNavigator() {
-  return (
-    <Stack.Navigator initialRouteName="Welcome" screenOptions={screenOpts}>
-      <Stack.Screen name="Welcome"        component={WelcomeScreen} />
-      <Stack.Screen name="Login"          component={LoginScreen} />
-      <Stack.Screen name="Register"       component={RegisterScreen} />
-      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-    </Stack.Navigator>
-  );
-}
-
-// ── Authenticated Stack (logged in) ─────────────────────────
-function AppNavigatorStack() {
+function AppStack() {
   return (
     <Stack.Navigator initialRouteName="Dashboard" screenOptions={screenOpts}>
       <Stack.Screen name="Dashboard"            component={DashboardScreen} />
+      <Stack.Screen name="Welcome"              component={WelcomeScreen} />
+      <Stack.Screen name="Login"                component={LoginScreen} />
+      <Stack.Screen name="Register"             component={RegisterScreen} />
+      <Stack.Screen name="ForgotPassword"       component={ForgotPasswordScreen} />
       <Stack.Screen name="ScanPrescription"     component={ScanPrescriptionScreen} />
       <Stack.Screen name="AIExtracting"         component={AIExtractingScreen} />
       <Stack.Screen name="ReviewMedicines"      component={ReviewMedicinesScreen} />
@@ -100,9 +92,9 @@ function AppNavigatorStack() {
   );
 }
 
-// ── Root Navigator — switches between Guest / App based on auth ──
+// ── Root Navigator ──────────────────────────────────────────
 export default function AppNavigator() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isLoading } = useAuth();
 
   // Show a splash/loading screen while restoring session from AsyncStorage
   if (isLoading) {
@@ -115,7 +107,7 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer>
-      {isAuthenticated ? <AppNavigatorStack /> : <GuestNavigator />}
+      <AppStack />
     </NavigationContainer>
   );
 }

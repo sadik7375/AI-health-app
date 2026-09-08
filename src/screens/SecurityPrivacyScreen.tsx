@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Switch, StatusBar, Alert, Modal, Platform,
+  TextInput, Switch, StatusBar, Alert, Modal, Platform, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { useAuth } from '../context/AuthContext';
+import { apiProfile } from '../api/apiClient';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'SecurityPrivacy'>;
 interface Props { navigation: Nav; }
 
 export default function SecurityPrivacyScreen({ navigation }: Props) {
+  const { logout } = useAuth();
   const [showPwModal, setShowPwModal] = useState(false);
   const [curPw,       setCurPw]       = useState('');
   const [newPw,       setNewPw]       = useState('');
@@ -28,10 +31,30 @@ export default function SecurityPrivacyScreen({ navigation }: Props) {
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert('Delete Account', 'This action cannot be undone. All your data will be permanently deleted.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => Alert.alert('Account deletion initiated') },
-    ]);
+    Alert.alert(
+      'Delete Account',
+      'This action cannot be undone. All your data will be permanently deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const res = await apiProfile.deleteAccount();
+              if (res && res.success) {
+                Alert.alert('Success', 'Your account has been deleted.');
+                await logout();
+              } else {
+                Alert.alert('Error', res.message || 'Failed to delete account');
+              }
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to delete account');
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -78,6 +101,34 @@ export default function SecurityPrivacyScreen({ navigation }: Props) {
               <Text style={s.rowSub}>Export all your health records</Text>
             </View>
             <Feather name="chevron-right" size={18} color="#3B82F6" />
+          </TouchableOpacity>
+
+          <View style={s.divider} />
+
+          <TouchableOpacity style={s.row} activeOpacity={0.7}
+            onPress={() => Linking.openURL('https://cannyapps.com/caremate-ai-privacy-policy')}>
+            <View style={[s.iconBg, { backgroundColor: '#F3E8FF' }]}>
+              <Feather name="shield" size={18} color="#7C3AED" />
+            </View>
+            <View style={s.rowText}>
+              <Text style={[s.rowTitle, { color: '#7C3AED' }]}>Privacy Policy</Text>
+              <Text style={s.rowSub}>Read our official data & privacy terms</Text>
+            </View>
+            <Feather name="external-link" size={18} color="#7C3AED" />
+          </TouchableOpacity>
+
+          <View style={s.divider} />
+
+          <TouchableOpacity style={s.row} activeOpacity={0.7}
+            onPress={() => Linking.openURL('https://cannyapps.com/caremate-ai-terms/')}>
+            <View style={[s.iconBg, { backgroundColor: '#FEF3C7' }]}>
+              <Feather name="file-text" size={18} color="#D97706" />
+            </View>
+            <View style={s.rowText}>
+              <Text style={[s.rowTitle, { color: '#D97706' }]}>Terms &amp; Conditions</Text>
+              <Text style={s.rowSub}>Read our terms of service & disclaimers</Text>
+            </View>
+            <Feather name="external-link" size={18} color="#D97706" />
           </TouchableOpacity>
 
           <View style={s.divider} />

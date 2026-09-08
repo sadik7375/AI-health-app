@@ -6,16 +6,15 @@
  */
 
 // ─────────────────────────────────────────────────────────────────────────
-//  ⚠️  IMPORTANT: Never use "localhost" for physical devices!
-//  Physical phones cannot reach PC's localhost.
-//  Use your PC's Wi-Fi IPv4 address (found via: ipconfig → IPv4 Address).
+//  🌐  Production API Server
+//  App is now connected to the live production backend.
 //
-//  Current PC IP: 192.168.110.19
-//  Laravel backend runs on port 8000.
+//  Production URL: http://caremateai.cannyapps.com
 //
-//  If you switch networks (home/office/hotspot), update this IP accordingly.
+//  ⚠️  NOTE: For local development, replace with your PC's Wi-Fi IP:
+//  Example: 'http://192.168.x.x:8000/api'
 // ─────────────────────────────────────────────────────────────────────────
-export const BASE_URL = 'http://192.168.110.19:8000/api';
+export const BASE_URL = 'https://caremateaiapp.cannyapps.com/api';
 
 let authToken: string | null = null;
 
@@ -53,17 +52,29 @@ export const apiRequest = async (
       options.body = isFormData ? body : JSON.stringify(body);
     }
 
-    const response = await fetch(`${BASE_URL}${endpoint}`, options);
-    const data = await response.json();
+    let url = `${BASE_URL}${endpoint}`;
+    if (method === 'GET') {
+      const separator = url.includes('?') ? '&' : '?';
+      url = `${url}${separator}_t=${Date.now()}`;
+    }
+
+    const response = await fetch(url, options);
+    let data;
+    try {
+      data = await response.json();
+    } catch (_) {
+      throw new Error(`Server returned status ${response.status} (invalid JSON response)`);
+    }
 
     if (!response.ok) {
-      throw new Error(data.message || 'API request failed');
+      throw new Error(data?.message || `API request failed with status ${response.status}`);
     }
 
     return data;
   } catch (error: any) {
-    console.warn(`API Error [${endpoint}]:`, error.message);
-    throw error;
+    console.warn(`API Error [${endpoint}]:`, error?.message || error);
+    const detail = `[URL: ${BASE_URL}${endpoint}] Error: ${error?.message || String(error)}`;
+    throw new Error(detail);
   }
 };
 
@@ -73,7 +84,9 @@ export const apiAuth = {
   login: (data: any) => apiRequest('/auth/login', 'POST', data),
   forgotPassword: (email: string) => apiRequest('/auth/forgot-password', 'POST', { email }),
   verifyOtp: (email: string, otp: string) => apiRequest('/auth/verify-otp', 'POST', { email, otp }),
+  resendVerification: (email: string) => apiRequest('/auth/resend-verification', 'POST', { email }),
   resetPassword: (data: any) => apiRequest('/auth/reset-password', 'POST', data),
+  googleLogin: (idToken: string) => apiRequest('/auth/google', 'POST', { id_token: idToken }),
 };
 
 // ── User Profile Endpoints ─────────────────────────────────────
@@ -81,11 +94,13 @@ export const apiProfile = {
   getProfile: () => apiRequest('/profile', 'GET'),
   updateProfile: (data: any) => apiRequest('/profile/update', 'PUT', data),
   changePassword: (data: any) => apiRequest('/profile/password', 'POST', data),
+  deleteAccount: () => apiRequest('/profile/account', 'DELETE'),
 };
 
 // ── Medicine Endpoints ────────────────────────────────────────
 export const apiMedicines = {
   getAll: () => apiRequest('/medicines', 'GET'),
+  getHistory: () => apiRequest('/medicines/history', 'GET'),
   toggleTaken: (id: string) => apiRequest(`/medicines/${id}/toggle`, 'POST'),
   addManual: (data: any) => apiRequest('/medicines/manual', 'POST', data),
   update: (id: string, data: any) => apiRequest(`/medicines/${id}`, 'PUT', data),

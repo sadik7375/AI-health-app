@@ -13,6 +13,7 @@ import { healthStore, LabReport, LabParameter } from '../store/healthStore';
 import { BASE_URL } from '../api/apiClient';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -27,8 +28,41 @@ const STATUS_FILTERS = ['All', 'Normal', 'High', 'Low', 'Pending'] as const;
 // ── Simulated mock images (colored rectangles) ────────────────────
 const MOCK_IMAGE_COLORS = ['#D1FAE5', '#DBEAFE', '#FEF3C7', '#EDE9FE'];
 
+const DUMMY_LAB_REPORTS: LabReport[] = [
+  {
+    id: 'dl1',
+    name: 'Complete Blood Count (CBC)',
+    lab: 'Popular Diagnostic Lab',
+    date: '2026-07-20',
+    type: 'Blood Test',
+    status: 'Normal',
+    ocrData: [
+      { label: 'Hemoglobin (Hb)', value: '14.2 g/dL', refRange: '13.5 - 17.5 g/dL', flag: 'Normal' },
+      { label: 'White Blood Cells (WBC)', value: '7,500 /mcL', refRange: '4,500 - 11,000 /mcL', flag: 'Normal' },
+      { label: 'Platelet Count', value: '250,000 /mcL', refRange: '150,000 - 450,000 /mcL', flag: 'Normal' },
+    ],
+    notes: 'All parameters within normal reference ranges. Maintain healthy diet.',
+  },
+  {
+    id: 'dl2',
+    name: 'Lipid Profile Test',
+    lab: 'City Care Pathology',
+    date: '2026-07-10',
+    type: 'Blood Test',
+    status: 'High',
+    ocrData: [
+      { label: 'Total Cholesterol', value: '220 mg/dL', refRange: '< 200 mg/dL', flag: 'High' },
+      { label: 'HDL Cholesterol', value: '50 mg/dL', refRange: '> 40 mg/dL', flag: 'Normal' },
+      { label: 'LDL Cholesterol', value: '145 mg/dL', refRange: '< 100 mg/dL', flag: 'High' },
+      { label: 'Triglycerides', value: '160 mg/dL', refRange: '< 150 mg/dL', flag: 'High' },
+    ],
+    notes: 'Mildly elevated LDL cholesterol. Dietary modifications and exercise recommended.',
+  },
+];
+
 // ════════════════════════════════════════════════════════════════
 export default function LabReportScreen({ navigation }: Props) {
+  const { user, isAuthenticated } = useAuth();
   const [tab,     setTab]     = useState<'All Reports' | 'Scan & Upload'>('All Reports');
   const [filter,  setFilter]  = useState<typeof STATUS_FILTERS[number]>('All');
   const [reports, setReports] = useState<LabReport[]>([]);
@@ -36,19 +70,23 @@ export default function LabReportScreen({ navigation }: Props) {
   // Sync with healthStore on mount
   useEffect(() => {
     const unsubscribe = healthStore.subscribe(() => {
-      setReports([...healthStore.getLabReports()]);
+      const active = healthStore.getLabReports();
+      setReports(active.length > 0 ? active : DUMMY_LAB_REPORTS);
     });
-    setReports([...healthStore.getLabReports()]);
+    const active = healthStore.getLabReports();
+    setReports(active.length > 0 ? active : DUMMY_LAB_REPORTS);
     return unsubscribe;
   }, []);
 
-  const getFullImageUri = (uri?: string) => {
+  const getFullImageUri = (item?: any) => {
+    const uri = typeof item === 'string' ? item : (item?.imageUri || item?.image_path || item?.image_url || item?.image);
     if (!uri) return undefined;
     if (uri.startsWith('http://') || uri.startsWith('https://') || uri.startsWith('file://') || uri.startsWith('data:')) {
       return uri;
     }
-    const host = BASE_URL.replace('/api', '');
-    return `${host}${uri}`;
+    const host = BASE_URL.replace(/\/api\/?$/, '');
+    const cleanUri = uri.startsWith('/') ? uri : `/${uri}`;
+    return `${host}${cleanUri}`;
   };
 
   // Detail view
@@ -76,8 +114,62 @@ export default function LabReportScreen({ navigation }: Props) {
 
   const filtered = filter === 'All' ? reports : reports.filter(r => r.status === filter);
 
+  const checkScanLimit = () => {
+    if (!isAuthenticated) {
+      Alert.alert(
+        'Account Required',
+        'Please sign in or register to scan real lab reports and extract AI results into your health vault.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Register / Sign In', onPress: () => navigation.navigate('Register') }
+        ]
+      );
+      return false;
+    }
+
+    const plan = user?.plan_tier?.toLowerCase() ?? 'free';
+    
+    if (plan === 'free') {
+      if (reports.length >= 1) {
+        navigation.navigate('UpgradePlan');
+        return false;
+      }
+    } else if (plan === 'basic' || plan === 'pro') {
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      const monthlyScans = reports.filter(r => {
+        // Parse date (fall back to current date if missing or invalid)
+        const rDate = r.date ? new Date(r.date) : new Date();
+        return rDate.getMonth() === currentMonth && rDate.getFullYear() === currentYear;
+      }).length;
+
+      if (monthlyScans >= 10) {
+        navigation.navigate('UpgradePlan');
+        return false;
+      }
+    } else if (plan === 'premium' || plan === 'family') {
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      const monthlyScans = reports.filter(r => {
+        const rDate = r.date ? new Date(r.date) : new Date();
+        return rDate.getMonth() === currentMonth && rDate.getFullYear() === currentYear;
+      }).length;
+
+      if (monthlyScans >= 30) {
+        Alert.alert(
+          'Monthly Limit Reached',
+          'Premium plan is limited to 30 lab report scans per month.',
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+    }
+    return true;
+  };
+
   // Camera & Gallery actions
   const pickFromGallery = async () => {
+    if (!checkScanLimit()) return;
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Permission Denied', 'Gallery access permission is required to upload a lab report.');
@@ -95,6 +187,7 @@ export default function LabReportScreen({ navigation }: Props) {
   };
 
   const takePhoto = async () => {
+    if (!checkScanLimit()) return;
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Permission Denied', 'Camera access permission is required to capture a lab report.');
@@ -359,7 +452,7 @@ export default function LabReportScreen({ navigation }: Props) {
                     <Text style={s.ocrDataLabel}>{d.label}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <Text style={s.ocrDataValue}>{d.value}</Text>
-                      {d.flag && (
+                      {!!d.flag && (
                         <View style={[s.flagBadge, { backgroundColor: statusBg[d.flag] }]}>
                           <Text style={[s.flagText, { color: statusColor[d.flag] }]}>{d.flag}</Text>
                         </View>
@@ -427,7 +520,7 @@ export default function LabReportScreen({ navigation }: Props) {
             >
               <Feather name="x" size={28} color="#FFFFFF" />
             </TouchableOpacity>
-            {selectedReport.imageUri && (
+            {!!selectedReport.imageUri && (
               <Image 
                 source={{ uri: getFullImageUri(selectedReport.imageUri) }} 
                 style={{ width: '95%', height: '80%' }}
@@ -588,7 +681,7 @@ export default function LabReportScreen({ navigation }: Props) {
             <View style={s.scanningWrap}>
               <Text style={s.scanStepTitle}>Preview Selected Scan</Text>
               <View style={s.scanningBox}>
-                {selectedImage && (
+                {!!selectedImage && (
                   <Image 
                     source={{ uri: selectedImage }} 
                     style={{ width: '100%', height: '100%', borderRadius: 18 }} 

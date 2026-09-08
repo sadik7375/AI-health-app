@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ScrollView, StatusBar,
@@ -10,13 +10,23 @@ import { RootStackParamList } from '../navigation/AppNavigator';
 import { Logo } from '../components/Logo';
 import { AntDesign, FontAwesome } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+let GoogleSignin: any = null;
+let statusCodes: any = null;
+try {
+  const GoogleSDK = require('@react-native-google-signin/google-signin');
+  GoogleSignin = GoogleSDK.GoogleSignin;
+  statusCodes = GoogleSDK.statusCodes;
+} catch (e) {
+  // Gracefully handle missing native module in Expo Go
+}
+import { apiAuth } from '../api/apiClient';
 
 const { height } = Dimensions.get('window');
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'Login'> };
 
 export default function LoginScreen({ navigation }: Props) {
-  const { login } = useAuth();
+  const { login, loginWithToken } = useAuth();
 
   const [email, setEmail]               = useState('');
   const [password, setPassword]         = useState('');
@@ -24,6 +34,19 @@ export default function LoginScreen({ navigation }: Props) {
   const [emailFocused, setEmailFocused] = useState(false);
   const [passFocused, setPassFocused]   = useState(false);
   const [loading, setLoading]           = useState(false);
+
+  useEffect(() => {
+    if (GoogleSignin) {
+      try {
+        GoogleSignin.configure({
+          webClientId: '997392276690-chqgup5tk1t0ag2hs19om8vhauoqvbp6.apps.googleusercontent.com',
+          offlineAccess: true,
+        });
+      } catch (err) {
+        console.warn("Failed to configure Google Sign-In:", err);
+      }
+    }
+  }, []);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -37,8 +60,61 @@ export default function LoginScreen({ navigation }: Props) {
 
     if (!result.success) {
       Alert.alert('Login Failed', result.message || 'Invalid credentials. Please try again.');
+    } else {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Dashboard' }],
+      });
     }
-    // On success, AuthContext sets isAuthenticated = true → AppNavigator auto-switches to AppStack
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (!GoogleSignin) {
+      Alert.alert(
+        'Not Supported in Expo Go',
+        'Google Sign-In contains native binary code and is only supported in Custom Development Builds. Please use email/password login inside Expo Go.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    try {
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      const idToken = userInfo.data?.idToken;
+
+      if (!idToken) {
+        Alert.alert('Error', 'Google sign-in did not return an identity token.');
+        return;
+      }
+
+      setLoading(true);
+      const res = await apiAuth.googleLogin(idToken);
+      if (res && res.success && (res.token || res.access_token)) {
+        const token = res.token || res.access_token;
+        const user = res.user || res.data?.user || res.data;
+        await loginWithToken(token, user);
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Dashboard' }],
+        });
+      } else {
+        Alert.alert('Error', res.message || 'Google login failed.');
+      }
+    } catch (error: any) {
+      const code = error?.code;
+      if (statusCodes && code === statusCodes.SIGN_IN_CANCELLED) {
+        // user cancelled the login flow
+      } else if (statusCodes && code === statusCodes.IN_PROGRESS) {
+        // operation already in progress
+      } else if (statusCodes && code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        Alert.alert('Error', 'Play services not available or outdated.');
+      } else {
+        Alert.alert('Google Sign-In Error', error.message || 'An error occurred during Google sign-in.');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -55,7 +131,7 @@ export default function LoginScreen({ navigation }: Props) {
 
           {/* Title */}
           <Text style={styles.title}>Welcome back 👋</Text>
-          <Text style={styles.subtitle}>Sign in to your AI Health Vault account</Text>
+          <Text style={styles.subtitle}>Sign in to your CareMate AI account</Text>
 
           {/* Email */}
           <Text style={styles.label}>Email Address</Text>
@@ -108,22 +184,24 @@ export default function LoginScreen({ navigation }: Props) {
               : <Text style={styles.signInBtnText}>Sign In</Text>}
           </TouchableOpacity>
 
-          {/* Divider */}
+          {/* HIDE: Continue with Google Button */}
+          {/* 
           <View style={styles.dividerRow}>
             <View style={styles.line} />
             <Text style={styles.orText}>or</Text>
             <View style={styles.line} />
           </View>
 
-          {/* Social placeholder buttons */}
-          <TouchableOpacity style={styles.socialBtn} activeOpacity={0.8}>
+          <TouchableOpacity 
+            style={styles.socialBtn} 
+            activeOpacity={0.8}
+            onPress={handleGoogleSignIn}
+            disabled={loading}
+          >
             <AntDesign name="google" size={18} color="#000" style={{ marginRight: 8 }} />
             <Text style={styles.socialText}>Continue with Google</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.socialBtn} activeOpacity={0.8}>
-            <AntDesign name="apple" size={18} color="#000" style={{ marginRight: 8 }} />
-            <Text style={styles.socialText}>Continue with Apple</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> 
+          */}
 
           {/* Sign up link */}
           <View style={styles.signupRow}>
@@ -133,7 +211,7 @@ export default function LoginScreen({ navigation }: Props) {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.footer}>© 2026 AI Health Vault Inc</Text>
+          <Text style={styles.footer}>© 2026 CareMate AI Inc</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -186,5 +264,6 @@ const styles = StyleSheet.create({
   signupText: { fontSize: 14, color: '#718096' },
   signupLink: { fontSize: 14, color: '#4F46E5', fontWeight: '700' },
 
-  footer: { textAlign: 'center', color: '#CBD5E0', fontSize: 11, marginTop: 24 },
+  disclaimerText: { textAlign: 'center', color: '#A0AEC0', fontSize: 10, marginTop: 20, paddingHorizontal: 10, lineHeight: 14 },
+  footer: { textAlign: 'center', color: '#CBD5E0', fontSize: 11, marginTop: 8 },
 });

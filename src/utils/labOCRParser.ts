@@ -265,7 +265,7 @@ export function computeOverallStatus(params: ParsedParameter[]): FlagType {
 // Master entry point — simulates full AI OCR pipeline
 // reportType: the user-selected type (or detected from scan)
 // ─────────────────────────────────────────────────────────────
-export function simulateOCRScan(reportType: string, patientName: string = 'Abdul Karim'): ParsedReport {
+export function simulateOCRScan(reportType: string, patientName: string = 'John Doe'): ParsedReport {
   const mockData = MOCK_OCR_BY_TYPE[reportType] ?? MOCK_OCR_BY_TYPE['Blood Test'];
   const raw      = mockData.rawText.replace('{PATIENT}', patientName).replace('{DATE}', getTodayStr());
   const category = detectCategory(raw);

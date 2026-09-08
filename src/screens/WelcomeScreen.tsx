@@ -44,7 +44,7 @@ export default function WelcomeScreen({ navigation }: Props) {
           <View style={styles.logoWrapper}>
             <Logo size={100} inverted={true} />
           </View>
-          <Text style={styles.appName}>AI Health Vault</Text>
+          <Text style={styles.appName}>CareMate AI</Text>
         </View>
 
         {/* Bottom Actions Section */}

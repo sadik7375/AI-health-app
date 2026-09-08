@@ -1,25 +1,49 @@
 {
   "expo": {
-    "name": "AIHealthVault",
-    "slug": "AIHealthVault",
+    "name": "CareMate AI",
+    "slug": "caremate-ai",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.caremateai.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "CareMate AI needs access to your camera to scan prescriptions and lab reports.",
+        "NSPhotoLibraryUsageDescription": "CareMate AI needs access to your photo library to select prescriptions and medical documents."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#6B52ED",
+        "foregroundImage": "./assets/android-icon-foreground.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.caremateai.app",
+      "versionCode": 23,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.676610858328-g23aabte530pq49t9a7uqnmrbkqgo3fv"
+        }
+      ],
+      "expo-sharing",
+      "expo-status-bar",
+      "expo-font",
+      "expo-asset"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e78d9e6b-3e97-4ebe-91ef-ebde65c223ff"
+      }
+    },
+    "owner": "sadik7375"
   }
 }

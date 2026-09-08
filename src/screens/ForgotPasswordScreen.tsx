@@ -10,11 +10,14 @@ import {
   Platform,
   StatusBar,
   Animated,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { apiAuth } from '../api/apiClient';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'ForgotPassword'>;
 interface Props {
@@ -25,6 +28,7 @@ type Step = 'EMAIL' | 'OTP' | 'NEW_PASSWORD' | 'SUCCESS';
 
 export default function ForgotPasswordScreen({ navigation }: Props) {
   const [step, setStep] = useState<Step>('EMAIL');
+  const [loading, setLoading] = useState(false);
 
   // Step 1: Email
   const [email, setEmail] = useState('');
@@ -32,7 +36,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
   // Step 2: OTP (4 digits)
   const [otp, setOtp] = useState(['', '', '', '']);
   const otpInputRefs = useRef<Array<TextInput | null>>([]);
-  const [timer, setTimer] = useState(30);
+  const [timer, setTimer] = useState(600);
   const [canResend, setCanResend] = useState(false);
 
   // Step 3: Password
@@ -43,7 +47,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
 
   // Countdown timer for OTP
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: any;
     if (step === 'OTP' && timer > 0) {
       interval = setInterval(() => {
         setTimer((prev) => prev - 1);
@@ -72,17 +76,88 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
     }
   };
 
-  const resendOtp = () => {
-    setTimer(30);
-    setCanResend(false);
-    setOtp(['', '', '', '']);
+  const handleSendOtp = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const res = await apiAuth.forgotPassword(email.trim());
+      if (res.success) {
+        setTimer(600);
+        setCanResend(false);
+        setOtp(['', '', '', '']);
+        setStep('OTP');
+        Alert.alert('OTP Sent', 'A verification OTP has been sent to your email.');
+      } else {
+        Alert.alert('Error', res.message || 'Failed to send OTP');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendOtp = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const res = await apiAuth.forgotPassword(email.trim());
+      if (res.success) {
+        setTimer(600);
+        setCanResend(false);
+        setOtp(['', '', '', '']);
+        Alert.alert('OTP Sent', 'A verification OTP has been sent to your email.');
+      } else {
+        Alert.alert('Error', res.message || 'Failed to resend OTP');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const code = otp.join('');
+      const res = await apiAuth.verifyOtp(email.trim(), code);
+      if (res.success) {
+        setStep('NEW_PASSWORD');
+      } else {
+        Alert.alert('Error', res.message || 'Invalid or expired OTP code');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Verification failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const res = await apiAuth.resetPassword({
+        email: email.trim(),
+        newPassword: newPassword,
+      });
+      if (res.success) {
+        setStep('SUCCESS');
+      } else {
+        Alert.alert('Error', res.message || 'Failed to reset password');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Reset failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Password validation rules
-  const hasMinLength = newPassword.length >= 8;
-  const hasNumber = /\d/.test(newPassword);
-  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(newPassword);
-  const isPasswordValid = hasMinLength && hasNumber && hasSpecialChar;
+  const hasMinLength = newPassword.length >= 6;
+  const isPasswordValid = hasMinLength;
   const isMatch = newPassword === confirmPassword && confirmPassword.length > 0;
 
   return (
@@ -142,7 +217,6 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
                 <Feather name="mail" size={18} color="#A0AEC0" style={{ marginRight: 10 }} />
                 <TextInput
                   style={styles.input}
-                  placeholder="e.g. karim@example.com"
                   placeholderTextColor="#A0AEC0"
                   keyboardType="email-address"
                   autoCapitalize="none"
@@ -152,13 +226,19 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
               </View>
 
               <TouchableOpacity
-                style={[styles.primaryBtn, !email.includes('@') && styles.disabledBtn]}
-                disabled={!email.includes('@')}
-                onPress={() => setStep('OTP')}
+                style={[styles.primaryBtn, (!email.includes('@') || loading) && styles.disabledBtn]}
+                disabled={!email.includes('@') || loading}
+                onPress={handleSendOtp}
                 activeOpacity={0.85}
               >
-                <Text style={styles.primaryBtnText}>Send Verification Code</Text>
-                <Feather name="arrow-right" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
+                {loading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Text style={styles.primaryBtnText}>Send Verification Code</Text>
+                    <Feather name="arrow-right" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
+                  </>
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.linkRow} onPress={() => navigation.navigate('Login')}>
@@ -186,7 +266,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
                 {otp.map((digit, idx) => (
                   <TextInput
                     key={idx}
-                    ref={(ref) => (otpInputRefs.current[idx] = ref)}
+                    ref={(ref) => { otpInputRefs.current[idx] = ref; }}
                     style={[styles.otpBox, digit.length > 0 && styles.otpBoxFilled]}
                     keyboardType="number-pad"
                     maxLength={1}
@@ -205,17 +285,21 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
                     <Text style={styles.resendBtnText}>Resend Code</Text>
                   </TouchableOpacity>
                 ) : (
-                  <Text style={styles.timerText}>Resend in {timer}s</Text>
+                  <Text style={styles.timerText}>{`Resend in ${Math.floor(timer / 60)}m ${timer % 60}s`}</Text>
                 )}
               </View>
 
               <TouchableOpacity
-                style={[styles.primaryBtn, otp.some((d) => !d) && styles.disabledBtn]}
-                disabled={otp.some((d) => !d)}
-                onPress={() => setStep('NEW_PASSWORD')}
+                style={[styles.primaryBtn, (otp.some((d) => !d) || loading) && styles.disabledBtn]}
+                disabled={otp.some((d) => !d) || loading}
+                onPress={handleVerifyOtp}
                 activeOpacity={0.85}
               >
-                <Text style={styles.primaryBtnText}>Verify Code</Text>
+                {loading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Verify Code</Text>
+                )}
               </TouchableOpacity>
             </View>
           )}
@@ -269,19 +353,21 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
 
               {/* Password Rules Checklist */}
               <View style={styles.checklistCard}>
-                <RuleItem label="At least 8 characters long" valid={hasMinLength} />
-                <RuleItem label="Contains at least 1 number" valid={hasNumber} />
-                <RuleItem label="Contains a special character (!@#$)" valid={hasSpecialChar} />
+                <RuleItem label="At least 6 characters long" valid={hasMinLength} />
                 <RuleItem label="Passwords match" valid={isMatch} />
               </View>
 
               <TouchableOpacity
-                style={[styles.primaryBtn, (!isPasswordValid || !isMatch) && styles.disabledBtn]}
-                disabled={!isPasswordValid || !isMatch}
-                onPress={() => setStep('SUCCESS')}
+                style={[styles.primaryBtn, (!isPasswordValid || !isMatch || loading) && styles.disabledBtn]}
+                disabled={!isPasswordValid || !isMatch || loading}
+                onPress={handleResetPassword}
                 activeOpacity={0.85}
               >
-                <Text style={styles.primaryBtnText}>Reset Password</Text>
+                {loading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Reset Password</Text>
+                )}
               </TouchableOpacity>
             </View>
           )}

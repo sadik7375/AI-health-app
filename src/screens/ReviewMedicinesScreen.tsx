@@ -307,7 +307,7 @@ export default function ReviewMedicinesScreen({ navigation, route }: Props) {
                       onPress={() => toggleTiming(idx, t)}
                     >
                       <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                        {t} {active ? '✓' : ''}
+                        {`${t}${active ? ' ✓' : ''}`}
                       </Text>
                     </TouchableOpacity>
                   );

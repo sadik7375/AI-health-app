@@ -142,7 +142,7 @@ export default function HelpSupportScreen({ navigation }: Props) {
         {/* Version */}
         <View style={s.versionCard}>
           <MaterialCommunityIcons name="heart-pulse" size={20} color="#4F46E5" style={{ marginBottom: 6 }} />
-          <Text style={s.versionName}>AI Health Vault</Text>
+          <Text style={s.versionName}>CareMate AI</Text>
           <Text style={s.versionNum}>Version 1.0.0</Text>
           <Text style={s.versionBuild}>Build 2026.07</Text>
         </View>

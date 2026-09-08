@@ -145,19 +145,7 @@ export default function PersonalInfoScreen({ navigation }: Props) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
 
-          {/* Avatar */}
-          <View style={s.avatarSection}>
-            <View style={s.avatarWrap}>
-              <View style={s.avatar}>
-                <Text style={s.avatarText}>AK</Text>
-              </View>
-              <TouchableOpacity style={s.cameraBtn}>
-                <Feather name="camera" size={14} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-            <Text style={s.avatarName}>{fullName}</Text>
-            <Text style={s.avatarSub}>Patient ID: #AHV-9087-KA</Text>
-          </View>
+          <View style={{ height: 20 }} />
 
           {/* Section 1 — Basic Info */}
           <SectionCard title="Basic Information" icon="user">

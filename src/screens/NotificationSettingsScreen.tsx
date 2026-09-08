@@ -15,7 +15,7 @@ export default function NotificationSettingsScreen({ navigation }: Props) {
   const [medReminders,   setMedReminders]   = useState(true);
   const [medSound,       setMedSound]       = useState(true);
   const [medVibrate,     setMedVibrate]     = useState(true);
-  const [reminderBefore, setReminderBefore] = useState('10min');
+  const [reminderBefore, setReminderBefore] = useState(healthStore.reminderBefore);
   const [appUpdates,     setAppUpdates]     = useState(true);
   const [newsletter,     setNewsletter]     = useState(false);
 
@@ -67,7 +67,7 @@ export default function NotificationSettingsScreen({ navigation }: Props) {
     setShowTimePicker(false);
   };
 
-  const BEFORE_CHIPS = ['5min', '10min', '15min', '30min'];
+  const BEFORE_CHIPS = ['0min', '5min', '10min', '15min', '30min'];
 
   return (
     <SafeAreaView style={s.safe}>
@@ -101,8 +101,13 @@ export default function NotificationSettingsScreen({ navigation }: Props) {
             {BEFORE_CHIPS.map(c => (
               <TouchableOpacity key={c}
                 style={[s.chip, reminderBefore === c && s.chipActive, !medReminders && { opacity: 0.4 }]}
-                onPress={() => medReminders && setReminderBefore(c)}>
-                <Text style={[s.chipText, reminderBefore === c && s.chipTextActive]}>{c}</Text>
+                onPress={() => {
+                  if (medReminders) {
+                    setReminderBefore(c);
+                    healthStore.updateReminderBefore(c);
+                  }
+                }}>
+                <Text style={[s.chipText, reminderBefore === c && s.chipTextActive]}>{c === '0min' ? 'On Time' : c}</Text>
               </TouchableOpacity>
             ))}
           </View>

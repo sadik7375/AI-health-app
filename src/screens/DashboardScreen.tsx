@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,12 +13,15 @@ import {
   KeyboardAvoidingView,
   ActivityIndicator,
   Alert,
+  RefreshControl,
+  Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
-import { healthStore } from '../store/healthStore';
-import { apiAppointments, apiLabReports } from '../api/apiClient';
+import * as ImagePicker from 'expo-image-picker';
+import { healthStore, MedicineLogEntry } from '../store/healthStore';
+import { apiAppointments, apiLabReports, apiAuth, apiProfile } from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
@@ -29,6 +32,59 @@ type RoutePropType = RouteProp<RootStackParamList, 'Dashboard'>;
 
 const { width, height } = Dimensions.get('window');
 
+const DUMMY_REMINDERS: any[] = [
+  { id: 'd1', name: 'Amoxicillin', dosage: '500mg', time: '08:00 AM', taken: false, instructions: 'Take after breakfast', slot: 'Morning', date: 'Daily', prescriptionId: undefined, type: 'daily', status: 'active' },
+  { id: 'd2', name: 'Paracetamol', dosage: '650mg', time: '02:00 PM', taken: false, instructions: 'If needed for pain', slot: 'Afternoon', date: 'As needed', prescriptionId: undefined, type: 'sos', status: 'active' },
+  { id: 'd3', name: 'Metformin', dosage: '500mg', time: '08:00 PM', taken: true, instructions: 'Take with dinner', slot: 'Night', date: 'Daily', prescriptionId: undefined, type: 'daily', status: 'active' },
+];
+
+const DUMMY_APPOINTMENTS = [
+  {
+    id: 'da1',
+    doctor_name: 'Dr. Sarah Jenkins',
+    specialty: 'Cardiologist',
+    clinic_name: 'City Care Hospital',
+    date_time: new Date(Date.now() + 86400000).toISOString(),
+    status: 'Upcoming',
+  },
+  {
+    id: 'da2',
+    doctor_name: 'Dr. Michael Chen',
+    specialty: 'General Physician',
+    clinic_name: 'HealthPlus Clinic',
+    date_time: new Date(Date.now() + 86400000 * 5).toISOString(),
+    status: 'Upcoming',
+  },
+];
+
+const DUMMY_PRESCRIPTIONS = [
+  {
+    id: 'dp1',
+    doctor: 'Dr. Sarah Jenkins',
+    clinic: 'City Care Hospital',
+    date: '2026-07-25',
+    status: 'Reminder Active',
+    medicines: [
+      { name: 'Amoxicillin', dosage: '500mg', frequency: 'Daily', time: '08:00 AM' },
+    ],
+  },
+  {
+    id: 'dp2',
+    doctor: 'Dr. Michael Chen',
+    clinic: 'HealthPlus Clinic',
+    date: '2026-07-15',
+    status: 'Saved Only',
+    medicines: [
+      { name: 'Paracetamol', dosage: '650mg', frequency: 'As needed', time: '02:00 PM' },
+    ],
+  },
+];
+
+const DUMMY_LAB_REPORTS = [
+  { id: 'dl1', name: 'Complete Blood Count (CBC)', date: 'Jul 20, 2026', status: 'Normal' },
+  { id: 'dl2', name: 'Lipid Profile Test', date: 'Jul 10, 2026', status: 'High' },
+];
+
 interface Props {
   navigation: NavigationProp;
   route: RoutePropType;
@@ -37,9 +93,12 @@ interface Props {
 type TabType = 'Home' | 'Medications' | 'Records' | 'Profile';
 
 export default function DashboardScreen({ navigation, route }: Props) {
-  const { user, logout } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { user, logout, updateUser, isAuthenticated } = useAuth();
   const [currentTab, setCurrentTab] = useState<TabType>('Home');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showGuestAuthModal, setShowGuestAuthModal] = useState(false);
+  const [guestActionName, setGuestActionName] = useState('access this feature');
 
   // Sub-tabs for Prescription History (Records tab)
   const [recordsSubTab, setRecordsSubTab] = useState<'All' | 'WithReminders' | 'SavedOnly' | 'Completed'>('All');
@@ -50,7 +109,7 @@ export default function DashboardScreen({ navigation, route }: Props) {
   const [labReports, setLabReports] = useState(healthStore.getLabReports());
 
   // API data
-  const [appointmentsCount, setAppointmentsCount] = useState<number>(0);
+  const [appointments, setAppointments] = useState<any[]>([]);
   const [reportsCount, setReportsCount] = useState<number>(0);
   const [apiLoading, setApiLoading] = useState(true);
 
@@ -65,6 +124,20 @@ export default function DashboardScreen({ navigation, route }: Props) {
   const [manualMedTime, setManualMedTime] = useState('');
   const [manualMedDate, setManualMedDate] = useState('');
 
+  // Medication History Modal state
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState<MedicineLogEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Header Search state
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Notifications Modal state
+  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [notificationsList, setNotificationsList] = useState<any[]>([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(true);
+
   // Date and Time Pickers for Modals
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [pickerHour, setPickerHour] = useState('10');
@@ -76,6 +149,120 @@ export default function DashboardScreen({ navigation, route }: Props) {
   const [pickerMonth, setPickerMonth] = useState(new Date().getMonth() + 1);
   const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await healthStore.syncWithBackend();
+      const [apptRes, labRes, profileRes] = await Promise.all([
+        apiAppointments.getAll().catch(() => null),
+        apiLabReports.getAll().catch(() => null),
+        apiProfile.getProfile().catch(() => null),
+      ]);
+      if (apptRes) {
+        const appts = apptRes.data || apptRes.appointments;
+        if (appts) setAppointments(appts);
+      }
+      if (labRes) {
+        const reps = labRes.data || labRes.reports;
+        if (reps) setReportsCount(reps.length);
+      }
+      if (profileRes && profileRes.success && profileRes.user) {
+        await updateUser(profileRes.user);
+      }
+    } catch (_) {
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  const loadHistory = React.useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const logs = await healthStore.getMedicationHistory();
+      setHistoryEntries(logs);
+
+      const compiled: any[] = [];
+
+      // 1. Add Missed Medication alerts from logs (up to 3 recent missed)
+      const missedLogs = logs.filter(l => l.status === 'missed').slice(0, 3);
+      missedLogs.forEach(l => {
+        compiled.push({
+          id: `missed-${l.id}`,
+          type: 'missed',
+          title: `Missed: ${l.name}`,
+          desc: `You missed your dose scheduled for ${l.time} on ${l.logDate}`,
+          time: l.logDate,
+          icon: 'pill-off',
+          iconColor: '#EF4444',
+          bgColor: '#FEF2F2',
+        });
+      });
+
+      // 2. Add upcoming appointment reminders
+      if (appointments && appointments.length > 0) {
+        const sortedAppts = [...appointments].sort((a, b) => {
+          const timeA = new Date(a.date_time || a.dateTime).getTime();
+          const timeB = new Date(b.date_time || b.dateTime).getTime();
+          return timeA - timeB;
+        });
+        sortedAppts.slice(0, 2).forEach((appt, idx) => {
+          const rawTime = appt.date_time || appt.dateTime;
+          let dateStr = rawTime;
+          try {
+            const dt = new Date(rawTime.replace(' ', 'T'));
+            dateStr = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + 
+                      dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+          } catch (_) {}
+
+          compiled.push({
+            id: `appt-upcoming-${appt.id || idx}`,
+            type: 'appointment',
+            title: 'Upcoming Appointment',
+            desc: `Appointment with Dr. ${appt.doctor_name || appt.doctorName || ''} (${appt.specialty || ''}) at ${appt.hospital_name || appt.hospitalName || appt.clinic || ''}`,
+            time: dateStr,
+            icon: 'calendar',
+            iconColor: '#3B82F6',
+            bgColor: '#EFF6FF',
+          });
+        });
+      }
+
+      // 3. Add prescription scanned confirmation if prescriptions exist
+      if (prescriptions && prescriptions.length > 0) {
+        const latestPresc = prescriptions[0];
+        compiled.push({
+          id: `presc-${latestPresc.id}`,
+          type: 'prescription',
+          title: 'Prescription Processed',
+          desc: `Extracted ${latestPresc.medicines.length} medicines from Dr. ${latestPresc.doctor}'s prescription.`,
+          time: latestPresc.date,
+          icon: 'file-check-outline',
+          iconColor: '#10B981',
+          bgColor: '#ECFDF5',
+        });
+      }
+
+      // 4. Add a daily health tip
+      compiled.push({
+        id: 'tip-daily',
+        type: 'tip',
+        title: 'Daily Health Tip',
+        desc: 'Remember to stay hydrated! Drink at least 8 glasses of water today.',
+        time: 'Today',
+        icon: 'water-outline',
+        iconColor: '#06B6D4',
+        bgColor: '#ECFEFF',
+      });
+
+      setNotificationsList(compiled);
+    } catch (_) {
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [prescriptions, appointments]);
+
   // Subscribe to health store updates
   useEffect(() => {
     const unsubscribe = healthStore.subscribe(() => {
@@ -83,21 +270,36 @@ export default function DashboardScreen({ navigation, route }: Props) {
       setReminders([...healthStore.getReminders()]);
       setLabReports([...healthStore.getLabReports()]);
     });
+
+    healthStore.scheduleAllNotifications();
+
     return unsubscribe;
   }, []);
 
-  // Fetch API overview counts
+  // Fetch API overview counts and profile
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const [apptRes, labRes] = await Promise.all([
+        const [apptRes, labRes, profileRes] = await Promise.all([
           apiAppointments.getAll().catch(() => null),
           apiLabReports.getAll().catch(() => null),
+          apiProfile.getProfile().catch(() => null),
         ]);
         if (!mounted) return;
-        if (apptRes && apptRes.data) setAppointmentsCount(apptRes.data.length);
-        if (labRes  && labRes.data)  setReportsCount(labRes.data.length);
+        if (apptRes) {
+          const appts = apptRes.data || apptRes.appointments;
+          if (appts) setAppointments(appts);
+        }
+        if (labRes) {
+          const reps = labRes.data || labRes.reports;
+          if (reps) setReportsCount(reps.length);
+        }
+        if (profileRes && profileRes.success && profileRes.user) {
+          await updateUser(profileRes.user);
+        }
+        // Load history logs and populate notifications list
+        loadHistory().catch(() => null);
       } catch (_) {
         // API not ready yet — show 0
       } finally {
@@ -105,7 +307,7 @@ export default function DashboardScreen({ navigation, route }: Props) {
       }
     })();
     return () => { mounted = false; };
-  }, []);
+  }, [loadHistory]);
 
   // Listen to incoming route params (e.g. from reminder creation screens)
   useEffect(() => {
@@ -134,39 +336,123 @@ export default function DashboardScreen({ navigation, route }: Props) {
     if (h < 17) return 'Good Afternoon';
     return 'Good Evening';
   };
-  const firstName = user?.name?.split(' ')[0] ?? 'User';
+  const firstName = user?.name ? (user.name.split(' ')[0] ?? 'User') : 'Guest';
 
   // Add Action Handler
   const handleAddOption = (option: string) => {
     setShowAddModal(false);
-    if (option === 'Scan Prescription') {
-      navigation.navigate('ScanPrescription');
-    } else if (option === 'Add Reminder') {
-      setCurrentTab('Medications');
-    } else if (option === 'Doctor Appointment' || option === 'Book Appointment' || option === 'Appointments') {
-      navigation.navigate('Appointments');
-    } else if (option === 'Lab Report' || option === 'Lab Report Upload' || option === 'Upload Lab Report') {
+    const normalized = option.trim().toLowerCase();
+
+    // Allow view-only navigation for guest demo mode
+    if (
+      normalized === 'lab report' || 
+      normalized === 'lab report upload' || 
+      normalized === 'upload lab report' || 
+      normalized === 'upload report'
+    ) {
       navigation.navigate('LabReport');
-    } else if (option === 'Reports' || option === 'Health Report' || option === 'Analytics Report') {
+      return;
+    }
+
+    if (normalized === 'doctor appointment' || normalized === 'book appointment' || normalized === 'appointments') {
+      navigation.navigate('Appointments');
+      return;
+    }
+
+    if (normalized === 'reports' || normalized === 'health report' || normalized === 'analytics report') {
       navigation.navigate('HealthAnalyticsReport');
-    } else if (option === 'AI Health Assistant' || option === 'AI Assistant' || option === 'Chatbot') {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setGuestActionName(option);
+      setShowGuestAuthModal(true);
+      return;
+    }
+
+    if (normalized === 'scan prescription') {
+      navigation.navigate('ScanPrescription');
+    } else if (normalized === 'add reminder' || normalized === 'medicine reminder') {
+      setCurrentTab('Medications');
+      setTimeout(() => {
+        setShowManualAddModal(true);
+      }, 300);
+    } else if (normalized === 'ai health assistant' || normalized === 'ai assistant' || normalized === 'chatbot') {
       navigation.navigate('AIHealthAssistant');
     } else {
-      alert(`${option} clicked!`);
+      Alert.alert('Action', `${option} clicked!`);
     }
   };
 
   // Render Home Tab
   const renderHome = () => {
-    const nextReminder = reminders.find(r => !r.taken) || reminders[0];
-    const dueCount = reminders.filter(r => !r.taken).length.toString();
-    const prescCount = prescriptions.length.toString();
+    const activeReminders = (!isAuthenticated && reminders.length === 0) ? DUMMY_REMINDERS : reminders;
+    const activeAppts = (!isAuthenticated && appointments.length === 0) ? DUMMY_APPOINTMENTS : appointments;
+    const activePrescriptions = (!isAuthenticated && prescriptions.length === 0) ? DUMMY_PRESCRIPTIONS : prescriptions;
+
+    const query = searchQuery.trim().toLowerCase();
+    const filteredReminders = query 
+      ? activeReminders.filter(r => 
+          r.name.toLowerCase().includes(query) ||
+          r.dosage.toLowerCase().includes(query)
+        )
+      : activeReminders;
+
+    const nextReminder = filteredReminders.find(r => !r.taken) || filteredReminders[0];
+    const dueCount = filteredReminders.filter(r => !r.taken).length.toString();
+    const prescCount = activePrescriptions.length.toString();
+
+    const sortedAppts = [...activeAppts].sort((a, b) => {
+      const timeA = new Date(a.date_time || a.dateTime).getTime();
+      const timeB = new Date(b.date_time || b.dateTime).getTime();
+      return timeA - timeB;
+    });
+    const nextAppt = sortedAppts[0];
+
+    const getApptDateParts = (dateTimeStr: string) => {
+      try {
+        const dt = new Date(dateTimeStr.replace(' ', 'T'));
+        const month = dt.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+        const day = dt.getDate().toString();
+        const weekday = dt.toLocaleDateString('en-US', { weekday: 'short' });
+        const time = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        
+        const diffMs = dt.getTime() - Date.now();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        let relativeStr = '';
+        if (diffDays === 0) relativeStr = 'Today';
+        else if (diffDays === 1) relativeStr = 'Tomorrow';
+        else if (diffDays > 1) relativeStr = `In ${diffDays} days`;
+        else relativeStr = 'Passed';
+
+        return { month, day, weekday, time, relativeStr };
+      } catch (_) {
+        return { month: 'MAY', day: '20', weekday: 'Tue', time: '10:30 AM', relativeStr: 'In 2 days' };
+      }
+    };
+
+    const apptParts = nextAppt ? getApptDateParts(nextAppt.date_time || nextAppt.dateTime) : null;
 
     return (
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        {!isAuthenticated && (
+          <View style={styles.demoDataNotice}>
+            <Feather name="info" size={16} color="#4F46E5" style={{ marginRight: 8 }} />
+            <Text style={styles.demoDataNoticeText}>
+              <Text style={{ fontWeight: '700' }}>Demo Mode:</Text> Showing sample health records. Want to save your own records?{' '}
+              <Text 
+                style={{ fontWeight: '700', color: '#4F46E5', textDecorationLine: 'underline' }} 
+                onPress={() => navigation.navigate('Register')}
+              >
+                Register / Sign In
+              </Text>
+            </Text>
+          </View>
+        )}
         {/* Next Medicine Card */}
         <View style={styles.nextMedContainer}>
           {nextReminder ? (
@@ -247,12 +533,9 @@ export default function DashboardScreen({ navigation, route }: Props) {
         {/* Quick Actions */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <TouchableOpacity>
-            <Text style={styles.viewAllText}>View All</Text>
-          </TouchableOpacity>
         </View>
 
-        {/* Grid of 6 items */}
+        {/* Grid of items */}
         <View style={styles.quickActionsGrid}>
           <QuickActionButton
             icon={<MaterialCommunityIcons name="qrcode-scan" size={24} color="#6C5CE7" />}
@@ -278,6 +561,7 @@ export default function DashboardScreen({ navigation, route }: Props) {
             bgColor="#FEF3C7"
             onPress={() => handleAddOption('Lab Report Upload')}
           />
+          {/* HIDE: Doctor Appointment & AI Health Assistant
           <QuickActionButton
             icon={<FontAwesome name="user-md" size={24} color="#EF4444" />}
             label="Doctor Appointment"
@@ -290,6 +574,7 @@ export default function DashboardScreen({ navigation, route }: Props) {
             bgColor="#EEF2F6"
             onPress={() => handleAddOption('AI Health Assistant')}
           />
+          */}
         </View>
 
         {/* Today's Overview */}
@@ -309,14 +594,16 @@ export default function DashboardScreen({ navigation, route }: Props) {
             textColor="#6C5CE7"
             onPress={() => setCurrentTab('Medications')}
           />
+          {/* HIDE: Appointments Overview Card
           <OverviewCard
             icon={<Feather name="calendar" size={20} color="#10B981" />}
             title="Appointments"
-            value="1"
+            value={appointments.length.toString()}
             bgColor="#ECFDF5"
             textColor="#10B981"
             onPress={() => handleAddOption('Appointments')}
           />
+          */}
           <OverviewCard
             icon={<MaterialCommunityIcons name="beaker-outline" size={20} color="#3B82F6" />}
             title="Reports"
@@ -335,48 +622,61 @@ export default function DashboardScreen({ navigation, route }: Props) {
           />
         </ScrollView>
 
-        {/* Appointment and Lab Reports Split Row */}
+        {/* Lab Reports Row */}
         <View style={styles.splitRow}>
-          {/* Upcoming Appointment */}
+          {/* HIDE: Upcoming Appointment
           <View style={styles.splitCol}>
             <View style={styles.sectionHeaderSmall}>
               <Text style={styles.sectionTitleSmall}>Upcoming Appointment</Text>
             </View>
-            <View style={styles.appointmentCard}>
-              <View style={styles.dateBlock}>
-                <Text style={styles.dateMonth}>MAY</Text>
-                <Text style={styles.dateDay}>20</Text>
-                <Text style={styles.dateWeek}>Tue</Text>
-              </View>
-              <View style={styles.appointmentDetails}>
-                <Text style={styles.docName}>Dr. Sarah Johnson</Text>
-                <Text style={styles.docSpec}>Cardiologist</Text>
-                
-                <View style={styles.infoRowSmall}>
-                  <Feather name="map-pin" size={11} color="#718096" style={{ marginRight: 4 }} />
-                  <Text style={styles.infoTextSmall}>City Medical</Text>
+            {nextAppt && apptParts ? (
+              <View style={styles.appointmentCard}>
+                <View style={styles.dateBlock}>
+                  <Text style={styles.dateMonth}>{apptParts.month}</Text>
+                  <Text style={styles.dateDay}>{apptParts.day}</Text>
+                  <Text style={styles.dateWeek}>{apptParts.weekday}</Text>
                 </View>
+                <View style={styles.appointmentDetails}>
+                  <Text style={styles.docName}>Dr. {nextAppt.doctor_name || nextAppt.doctorName || ''}</Text>
+                  <Text style={styles.docSpec}>{nextAppt.specialty || ''}</Text>
+                  
+                  <View style={styles.infoRowSmall}>
+                    <Feather name="map-pin" size={11} color="#718096" style={{ marginRight: 4 }} />
+                    <Text style={styles.infoTextSmall}>{nextAppt.hospital_name || nextAppt.hospitalName || nextAppt.clinic || ''}</Text>
+                  </View>
 
-                <View style={styles.infoRowSmall}>
-                  <Feather name="clock" size={11} color="#718096" style={{ marginRight: 4 }} />
-                  <Text style={styles.infoTextSmall}>10:30 AM</Text>
-                </View>
+                  <View style={styles.infoRowSmall}>
+                    <Feather name="clock" size={11} color="#718096" style={{ marginRight: 4 }} />
+                    <Text style={styles.infoTextSmall}>{apptParts.time}</Text>
+                  </View>
 
-                <View style={styles.badgeGreen}>
-                  <Text style={styles.badgeGreenText}>In 2 days</Text>
+                  <View style={styles.badgeGreen}>
+                    <Text style={styles.badgeGreenText}>{apptParts.relativeStr}</Text>
+                  </View>
                 </View>
               </View>
-            </View>
+            ) : (
+              <TouchableOpacity 
+                style={[styles.appointmentCard, { flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: 20, flex: 1 }]}
+                onPress={() => handleAddOption('Appointments')}
+                activeOpacity={0.8}
+              >
+                <Feather name="calendar" size={30} color="#A0AEC0" style={{ marginBottom: 6 }} />
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#718096', textAlign: 'center' }}>No Appointments</Text>
+                <Text style={{ fontSize: 10, color: '#A0AEC0', textAlign: 'center', marginTop: 2 }}>Tap to book a visit</Text>
+              </TouchableOpacity>
+            )}
           </View>
+          */}
 
           {/* Recent Lab Reports */}
-          <View style={styles.splitCol}>
+          <View style={[styles.splitCol, { flex: 1 }]}>
             <View style={styles.sectionHeaderSmall}>
               <Text style={styles.sectionTitleSmall}>Recent Lab Reports</Text>
             </View>
             <View style={styles.reportsCard}>
-              {labReports.length > 0 ? (
-                labReports.slice(0, 3).map((rep) => (
+              {((!isAuthenticated && labReports.length === 0) ? DUMMY_LAB_REPORTS : labReports).length > 0 ? (
+                ((!isAuthenticated && labReports.length === 0) ? DUMMY_LAB_REPORTS : labReports).slice(0, 3).map((rep) => (
                   <TouchableOpacity 
                     key={rep.id} 
                     onPress={() => navigation.navigate('LabReport')}
@@ -398,29 +698,44 @@ export default function DashboardScreen({ navigation, route }: Props) {
           </View>
         </View>
 
-        {/* AI Health Assistant Banner */}
-        <View style={styles.assistantBannerContainer}>
-          <View style={styles.assistantBanner}>
-            <View style={styles.botIconWrapper}>
-              <MaterialCommunityIcons name="robot" size={28} color="#4F46E5" />
-              <View style={styles.botPulse} />
-            </View>
-            <View style={styles.assistantDetails}>
-              <View style={styles.botTitleRow}>
-                <Text style={styles.botTitle}>AI Health Assistant</Text>
-                <View style={styles.betaBadge}>
-                  <Text style={styles.betaText}>BETA</Text>
-                </View>
+        {/* Upgrade Plan CTA Banner */}
+        <TouchableOpacity 
+          style={styles.upgradeBannerContainer} 
+          activeOpacity={0.9} 
+          onPress={() => navigation.navigate('UpgradePlan')}
+        >
+          <LinearGradient
+            colors={['#7C3AED', '#4F46E5']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.upgradeBanner}
+          >
+            <View style={styles.upgradeBannerLeft}>
+              <View style={styles.crownIconBg}>
+                <MaterialCommunityIcons name="crown" size={24} color="#FFD700" />
               </View>
-              <Text style={styles.botDesc}>
-                Ask me about your medicines, reports, appointments or any health queries.
-              </Text>
+              <View style={styles.upgradeDetails}>
+                <Text style={styles.upgradeTitle}>Upgrade to Premium</Text>
+                <Text style={styles.upgradeDesc}>
+                  Unlock AI insights, unlimited scans, family vaults, and 24/7 care support.
+                </Text>
+              </View>
             </View>
-            <TouchableOpacity style={styles.botStartBtn} activeOpacity={0.8} onPress={() => handleAddOption('AI Chat')}>
-              <Text style={styles.botStartBtnText}>Start Chat</Text>
-              <Feather name="chevron-right" size={14} color="#4F46E5" />
-            </TouchableOpacity>
+            <View style={styles.upgradeRightBtn}>
+              <Feather name="chevron-right" size={20} color="#FFFFFF" />
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {/* Medical Disclaimer Footer */}
+        <View style={styles.disclaimerContainer}>
+          <View style={styles.disclaimerIconBg}>
+            <Feather name="alert-circle" size={18} color="#D97706" />
           </View>
+          <Text style={styles.disclaimerText}>
+            <Text style={styles.disclaimerTitle}>Medical Disclaimer: </Text>
+            CareMate AI provides health tracking and general information only. It does not replace professional medical advice, diagnosis, or treatment.
+          </Text>
         </View>
 
         {/* Extra space */}
@@ -431,11 +746,23 @@ export default function DashboardScreen({ navigation, route }: Props) {
 
   // Render Medications Tab
   const renderMedications = () => {
-    // Group reminders by prescriptionId → doctor name
-    const grouped: { doctorLabel: string; prescriptionId: string | undefined; items: typeof reminders }[] = [];
+    const activeReminders = (!isAuthenticated && reminders.length === 0) ? DUMMY_REMINDERS : reminders;
+    const activePrescriptions = (!isAuthenticated && prescriptions.length === 0) ? DUMMY_PRESCRIPTIONS : prescriptions;
 
-    const manualReminders = reminders.filter(r => !r.prescriptionId);
-    const prescriptionReminders = reminders.filter(r => !!r.prescriptionId);
+    // Group reminders by prescriptionId → doctor name
+    const grouped: { doctorLabel: string; prescriptionId: string | undefined; items: typeof activeReminders }[] = [];
+
+    const query = searchQuery.trim().toLowerCase();
+    const filteredReminders = query 
+      ? activeReminders.filter(r => 
+          r.name.toLowerCase().includes(query) ||
+          r.dosage.toLowerCase().includes(query) ||
+          (r.slot && r.slot.toLowerCase().includes(query))
+        )
+      : activeReminders;
+
+    const manualReminders = filteredReminders.filter(r => !r.prescriptionId);
+    const prescriptionReminders = filteredReminders.filter(r => !!r.prescriptionId);
 
     // Group by prescriptionId
     const seen = new Set<string>();
@@ -443,7 +770,7 @@ export default function DashboardScreen({ navigation, route }: Props) {
       const pid = r.prescriptionId!;
       if (!seen.has(pid)) {
         seen.add(pid);
-        const presc = prescriptions.find(p => p.id === pid);
+        const presc = activePrescriptions.find(p => p.id === pid);
         grouped.push({
           doctorLabel: presc ? `${presc.doctor} (${presc.date})` : 'Unknown Doctor',
           prescriptionId: pid,
@@ -477,13 +804,43 @@ export default function DashboardScreen({ navigation, route }: Props) {
 
     return (
       <>
-        <ScrollView contentContainerStyle={styles.tabScrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.tabScrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
+          {!isAuthenticated && (
+            <View style={styles.demoDataNotice}>
+              <Feather name="info" size={16} color="#4F46E5" style={{ marginRight: 8 }} />
+              <Text style={styles.demoDataNoticeText}>
+                <Text style={{ fontWeight: '700' }}>Demo Mode:</Text> Showing sample medicine reminders.{' '}
+                <Text 
+                  style={{ fontWeight: '700', color: '#4F46E5', textDecorationLine: 'underline' }} 
+                  onPress={() => navigation.navigate('Register')}
+                >
+                  Register / Sign In
+                </Text>{' '}
+                to add your actual medications.
+              </Text>
+            </View>
+          )}
           {/* Header Row */}
           <View style={styles.medTabHeader}>
             <View>
               <Text style={styles.tabTitle}>My Medications</Text>
               <Text style={styles.tabSubtitle}>Reminders grouped by doctor</Text>
             </View>
+            <TouchableOpacity
+              style={styles.historyBtn}
+              onPress={() => {
+                setShowHistoryModal(true);
+                loadHistory();
+              }}
+              activeOpacity={0.7}
+            >
+              <Feather name="activity" size={14} color="#4F46E5" style={{ marginRight: 4 }} />
+              <Text style={styles.historyBtnText}>History</Text>
+            </TouchableOpacity>
           </View>
 
           {grouped.length > 0 ? (
@@ -495,20 +852,23 @@ export default function DashboardScreen({ navigation, route }: Props) {
                     <FontAwesome name="user-md" size={14} color="#4F46E5" />
                   </View>
                   <Text style={styles.doctorGroupLabel}>{group.doctorLabel}</Text>
-                  <Text style={styles.groupMedCount}>{group.items.length} medicine{group.items.length !== 1 ? 's' : ''}</Text>
+                  <Text style={styles.groupMedCount}>{`${group.items.length} medicine${group.items.length !== 1 ? 's' : ''}`}</Text>
                 </View>
 
                 {/* Medicine Items */}
                 {group.items.map((rem) => (
                   <MedicationListItem
                     key={rem.id}
+                    id={rem.id}
                     name={rem.name}
                     dosage={rem.dosage}
                     time={rem.time}
                     taken={rem.taken}
                     slot={rem.slot}
                     date={rem.date}
+                    imageUri={rem.imageUri}
                     onToggle={() => healthStore.toggleReminderTaken(rem.id)}
+                    onImageUpdate={(newUri) => healthStore.updateReminderImage(rem.id, newUri)}
                     onDelete={() => {
                       Alert.alert(
                         'Delete Reminder',
@@ -825,16 +1185,42 @@ export default function DashboardScreen({ navigation, route }: Props) {
 
   // Render Records Tab
   const renderRecords = () => {
+    const activePrescriptions = (!isAuthenticated && prescriptions.length === 0) ? DUMMY_PRESCRIPTIONS : prescriptions;
+
     // Filter prescriptions by recordsSubTab
-    const filtered = prescriptions.filter(p => {
-      if (recordsSubTab === 'WithReminders') return p.status === 'Reminder Active';
-      if (recordsSubTab === 'SavedOnly') return p.status === 'Saved Only';
-      if (recordsSubTab === 'Completed') return p.status === 'Completed';
-      return true; // 'All'
+    const query = searchQuery.trim().toLowerCase();
+    const filtered = activePrescriptions.filter(p => {
+      if (recordsSubTab === 'WithReminders' && p.status !== 'Reminder Active') return false;
+      if (recordsSubTab === 'SavedOnly' && p.status !== 'Saved Only') return false;
+      if (recordsSubTab === 'Completed' && p.status !== 'Completed') return false;
+
+      if (query) {
+        return (
+          p.doctor.toLowerCase().includes(query) ||
+          p.clinic.toLowerCase().includes(query) ||
+          p.date.toLowerCase().includes(query)
+        );
+      }
+      return true;
     });
 
     return (
       <ScrollView contentContainerStyle={styles.tabScrollContent} showsVerticalScrollIndicator={false}>
+        {!isAuthenticated && (
+          <View style={styles.demoDataNotice}>
+            <Feather name="info" size={16} color="#4F46E5" style={{ marginRight: 8 }} />
+            <Text style={styles.demoDataNoticeText}>
+              <Text style={{ fontWeight: '700' }}>Demo Mode:</Text> Showing sample prescription history.{' '}
+              <Text 
+                style={{ fontWeight: '700', color: '#4F46E5', textDecorationLine: 'underline' }} 
+                onPress={() => navigation.navigate('Register')}
+              >
+                Register / Sign In
+              </Text>{' '}
+              to scan and store prescriptions.
+            </Text>
+          </View>
+        )}
         <View style={styles.recordsHeader}>
           <Text style={styles.tabTitle}>Prescription History</Text>
           <TouchableOpacity 
@@ -903,7 +1289,7 @@ export default function DashboardScreen({ navigation, route }: Props) {
                   <View style={styles.prescInfo}>
                     <Text style={styles.prescDate}>{presc.date}</Text>
                     <Text style={styles.prescDoctor}>{presc.doctor}</Text>
-                    <Text style={styles.prescClinic}>{presc.clinic} • {presc.medicines.length} Medicines</Text>
+                    <Text style={styles.prescClinic}>{`${presc.clinic} • ${presc.medicines.length} Medicines`}</Text>
                   </View>
                 </View>
                 <View style={[badgeStyle, { alignSelf: 'center' }]}>
@@ -927,14 +1313,83 @@ export default function DashboardScreen({ navigation, route }: Props) {
   };
 
   // Render Profile Tab
-  const renderProfile = () => (
-    <ScrollView contentContainerStyle={styles.tabScrollContent} showsVerticalScrollIndicator={false}>
-      <View style={styles.profileCard}>
+  const renderProfile = () => {
+    if (!isAuthenticated || !user) {
+      return (
+        <ScrollView 
+          contentContainerStyle={styles.tabScrollContent} 
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.profileCard}>
+            <View style={[styles.avatarCircle, { backgroundColor: '#EEF2FF' }]}>
+              <Feather name="user" size={32} color="#4F46E5" />
+            </View>
+            <Text style={styles.profileNameLarge}>Guest User</Text>
+            <Text style={styles.profileBio}>Sign in to save records & sync health data</Text>
+            <TouchableOpacity
+              style={styles.guestProfileLoginBtn}
+              onPress={() => navigation.navigate('Login')}
+              activeOpacity={0.85}
+            >
+              <Feather name="log-in" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.guestProfileLoginText}>Sign In / Create Account</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.profileMenu}>
+            <ProfileMenuItem
+              icon={<MaterialCommunityIcons name="crown-outline" size={20} color="#D97706" />}
+              label="Upgrade Plan"
+              onPress={() => navigation.navigate('UpgradePlan')}
+            />
+            <ProfileMenuItem
+              icon={<Feather name="shield" size={20} color="#059669" />}
+              label="Security & Privacy / Terms"
+              onPress={() => navigation.navigate('SecurityPrivacy')}
+            />
+            <ProfileMenuItem
+              icon={<Feather name="help-circle" size={20} color="#8B5CF6" />}
+              label="Help & Support"
+              onPress={() => navigation.navigate('HelpSupport')}
+            />
+          </View>
+          <View style={{ height: 120 }} />
+        </ScrollView>
+      );
+    }
+
+    return (
+      <ScrollView 
+        contentContainerStyle={styles.tabScrollContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        <View style={styles.profileCard}>
         <View style={styles.avatarCircle}>
           <Text style={styles.avatarInitials}>{user?.name ? user.name.charAt(0).toUpperCase() : 'U'}</Text>
         </View>
         <Text style={styles.profileNameLarge}>{user?.name ?? 'User'}</Text>
         <Text style={styles.profileBio}>{user?.email ?? ''}</Text>
+        <View style={{
+          marginTop: 6,
+          paddingHorizontal: 8,
+          paddingVertical: 3,
+          borderRadius: 6,
+          backgroundColor: user?.email_verified_at ? '#E8F5E9' : '#FFEBEE',
+          borderWidth: 1,
+          borderColor: user?.email_verified_at ? '#C8E6C9' : '#FFCDD2',
+          alignSelf: 'center',
+        }}>
+          <Text style={{
+            fontSize: 10,
+            fontWeight: '700',
+            color: user?.email_verified_at ? '#2E7D32' : '#C62828',
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+          }}>
+            {user?.email_verified_at ? 'Verified' : 'Unverified'}
+          </Text>
+        </View>
 
         <View style={styles.statsRow}>
           <ProfileStat label="Blood" value={user?.blood_type ?? '—'} />
@@ -983,33 +1438,68 @@ export default function DashboardScreen({ navigation, route }: Props) {
       </View>
       <View style={{ height: 120 }} />
     </ScrollView>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       {/* Header (Top Row) */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={[styles.avatar, styles.avatarHeaderCircle]}>
-            <Text style={styles.avatarHeaderInitial}>{user?.name ? user.name.charAt(0).toUpperCase() : 'U'}</Text>
+      {isSearching ? (
+        <View style={styles.searchHeader}>
+          <Feather name="search" size={20} color="#718096" style={{ marginRight: 10 }} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={`Search ${currentTab.toLowerCase()}...`}
+            placeholderTextColor="#A0AEC0"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoFocus
+          />
+          <TouchableOpacity 
+            style={styles.closeSearchBtn} 
+            onPress={() => {
+              setIsSearching(false);
+              setSearchQuery('');
+            }}
+          >
+            <Feather name="x" size={20} color="#4A5568" />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <View style={[styles.avatar, styles.avatarHeaderCircle]}>
+              <Text style={styles.avatarHeaderInitial}>{user?.name ? user.name.charAt(0).toUpperCase() : 'U'}</Text>
+            </View>
+            <View style={styles.headerGreeting}>
+              <Text style={styles.greetingText}>{getGreeting()}, 👋</Text>
+              <Text style={styles.profileName}>{firstName}</Text>
+            </View>
           </View>
-          <View style={styles.headerGreeting}>
-            <Text style={styles.greetingText}>{getGreeting()}, 👋</Text>
-            <Text style={styles.profileName}>{firstName}</Text>
+          <View style={styles.headerRight}>
+            <TouchableOpacity 
+              style={styles.iconButton} 
+              activeOpacity={0.7}
+              onPress={() => setIsSearching(true)}
+            >
+              <Feather name="search" size={22} color="#1A202C" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.iconButton} 
+              activeOpacity={0.7}
+              onPress={() => {
+                setUnreadNotifications(false);
+                setShowNotificationsModal(true);
+              }}
+            >
+              <Feather name="bell" size={22} color="#1A202C" />
+              {unreadNotifications && <View style={styles.redDot} />}
+            </TouchableOpacity>
           </View>
         </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
-            <Feather name="search" size={22} color="#1A202C" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
-            <Feather name="bell" size={22} color="#1A202C" />
-            <View style={styles.redDot} />
-          </TouchableOpacity>
-        </View>
-      </View>
+      )}
 
       {/* Tab Contents */}
       {currentTab === 'Home' && renderHome()}
@@ -1018,7 +1508,13 @@ export default function DashboardScreen({ navigation, route }: Props) {
       {currentTab === 'Profile' && renderProfile()}
 
       {/* Floating Bottom Navigation Bar */}
-      <View style={styles.bottomTabBar}>
+      <View style={[
+        styles.bottomTabBar, 
+        { 
+          paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 14), 
+          height: 65 + Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 14) 
+        }
+      ]}>
         <TouchableOpacity
           style={styles.tabItem}
           onPress={() => setCurrentTab('Home')}
@@ -1125,12 +1621,14 @@ export default function DashboardScreen({ navigation, route }: Props) {
               desc="Store PDFs, images or lab files safely"
               onPress={() => handleAddOption('Upload Report')}
             />
+            {/* HIDE: Book Doctor Appointment
             <ActionSheetItem
               icon={<Feather name="calendar" size={22} color="#EF4444" />}
               title="Book Doctor Appointment"
               desc="Search doctors and schedule a visit"
               onPress={() => handleAddOption('Book Appointment')}
             />
+            */}
           </View>
         </TouchableOpacity>
       </Modal>
@@ -1153,6 +1651,226 @@ export default function DashboardScreen({ navigation, route }: Props) {
           </View>
         </View>
       )}
+      {/* Notifications Alerts Modal */}
+      <Modal
+        visible={showNotificationsModal}
+        animationType="slide"
+        onRequestClose={() => setShowNotificationsModal(false)}
+      >
+        <SafeAreaView style={styles.notifModalContainer}>
+          {/* Header */}
+          <View style={styles.notifHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={styles.notifHeaderIconBg}>
+                <Feather name="bell" size={18} color="#4F46E5" />
+              </View>
+              <View style={{ marginLeft: 12 }}>
+                <Text style={styles.notifTitle}>Notifications</Text>
+                <Text style={styles.notifSubtitle}>Alerts, tips and updates</Text>
+              </View>
+            </View>
+            <TouchableOpacity 
+              style={styles.closeNotifBtn}
+              onPress={() => setShowNotificationsModal(false)}
+              activeOpacity={0.7}
+            >
+              <Feather name="x" size={20} color="#4A5568" />
+            </TouchableOpacity>
+          </View>
+
+          {notificationsList.length === 0 ? (
+            <View style={styles.notifEmptyCenter}>
+              <MaterialCommunityIcons name="bell-outline" size={64} color="#CBD5E1" />
+              <Text style={styles.notifEmptyTitle}>All caught up!</Text>
+              <Text style={styles.notifEmptySubtitle}>You have no notifications or alerts at this moment.</Text>
+            </View>
+          ) : (
+            <ScrollView
+              contentContainerStyle={{ padding: 16 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {notificationsList.map(notif => (
+                <View key={notif.id} style={styles.notifCard}>
+                  <View style={[styles.notifIconWrapper, { backgroundColor: notif.bgColor }]}>
+                    <MaterialCommunityIcons 
+                      name={notif.icon} 
+                      size={20} 
+                      color={notif.iconColor} 
+                    />
+                  </View>
+                  <View style={{ marginLeft: 12, flex: 1 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={styles.notifCardTitle}>{notif.title}</Text>
+                      <Text style={styles.notifCardTime}>{notif.time}</Text>
+                    </View>
+                    <Text style={styles.notifCardDesc}>{notif.desc}</Text>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      {/* Medication History Modal */}
+      <Modal
+        visible={showHistoryModal}
+        animationType="slide"
+        onRequestClose={() => setShowHistoryModal(false)}
+      >
+        <SafeAreaView style={styles.historyModalContainer}>
+          {/* Header */}
+          <View style={styles.historyHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={styles.historyHeaderIconBg}>
+                <FontAwesome name="history" size={18} color="#4F46E5" />
+              </View>
+              <View style={{ marginLeft: 12 }}>
+                <Text style={styles.historyTitle}>Medication History</Text>
+                <Text style={styles.historySubtitle}>Logs of taken & missed doses</Text>
+              </View>
+            </View>
+            <TouchableOpacity 
+              style={styles.closeHistoryBtn}
+              onPress={() => setShowHistoryModal(false)}
+              activeOpacity={0.7}
+            >
+              <Feather name="x" size={20} color="#4A5568" />
+            </TouchableOpacity>
+          </View>
+
+          {historyLoading && historyEntries.length === 0 ? (
+            <View style={styles.historyCenter}>
+              <ActivityIndicator size="large" color="#4F46E5" />
+              <Text style={styles.historyLoadingText}>Loading history...</Text>
+            </View>
+          ) : historyEntries.length === 0 ? (
+            <ScrollView
+              contentContainerStyle={styles.historyEmptyCenter}
+              refreshControl={<RefreshControl refreshing={historyLoading} onRefresh={loadHistory} />}
+            >
+              <MaterialCommunityIcons name="history" size={64} color="#CBD5E1" />
+              <Text style={styles.historyEmptyTitle}>No history logs found</Text>
+              <Text style={styles.historyEmptySubtitle}>Log status will appear here when reminders reset daily.</Text>
+            </ScrollView>
+          ) : (
+            <ScrollView
+              contentContainerStyle={{ padding: 16 }}
+              showsVerticalScrollIndicator={false}
+              refreshControl={<RefreshControl refreshing={historyLoading} onRefresh={loadHistory} />}
+            >
+              {(() => {
+                // Group entries by date
+                const groupedByDate: { [date: string]: MedicineLogEntry[] } = {};
+                historyEntries.forEach(entry => {
+                  const dateStr = entry.logDate;
+                  if (!groupedByDate[dateStr]) {
+                    groupedByDate[dateStr] = [];
+                  }
+                  groupedByDate[dateStr].push(entry);
+                });
+
+                // Format dates nicely
+                const formatDateStr = (dateString: string) => {
+                  try {
+                    const dateObj = new Date(dateString);
+                    if (isNaN(dateObj.getTime())) return dateString;
+                    return dateObj.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+                  } catch (_) {
+                    return dateString;
+                  }
+                };
+
+                return Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a)).map(dateStr => (
+                  <View key={dateStr} style={styles.historyDateGroup}>
+                    <Text style={styles.historyDateLabel}>{formatDateStr(dateStr)}</Text>
+                    {groupedByDate[dateStr].map(log => {
+                      const isTaken = log.status === 'taken';
+                      return (
+                        <View key={log.id} style={styles.historyLogCard}>
+                          <View style={styles.historyLogInfo}>
+                            <View style={[styles.historyLogIconWrapper, { backgroundColor: isTaken ? '#ECFDF5' : '#FEF2F2' }]}>
+                              <MaterialCommunityIcons 
+                                name={isTaken ? "pill-multiple" : "pill-off"} 
+                                size={20} 
+                                color={isTaken ? "#10B981" : "#EF4444"} 
+                              />
+                            </View>
+                            <View style={{ marginLeft: 12, flex: 1 }}>
+                              <Text style={styles.historyLogName}>{log.name}</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                                <Feather name="clock" size={10} color="#94A3B8" />
+                                <Text style={styles.historyLogTime}>{log.time}</Text>
+                                {!!isTaken && !!log.takenAt && (
+                                  <>
+                                    <Text style={styles.historyLogDot}>•</Text>
+                                    <Text style={styles.historyLogTime}>
+                                      {new Date(log.takenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </Text>
+                                  </>
+                                )}
+                              </View>
+                            </View>
+                          </View>
+                          <View style={[styles.historyStatusBadge, { backgroundColor: isTaken ? '#D1FAE5' : '#FEE2E2', borderColor: isTaken ? '#A7F3D0' : '#FCA5A5' }]}>
+                            <Text style={[styles.historyStatusBadgeText, { color: isTaken ? '#065F46' : '#991B1B' }]}>
+                              {isTaken ? 'TAKEN' : 'MISSED'}
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ));
+              })()}
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      {/* Guest Auth Prompt Modal */}
+      <Modal
+        visible={showGuestAuthModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowGuestAuthModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowGuestAuthModal(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={{ width: '86%', alignSelf: 'center' }}>
+            <View style={styles.guestAuthCard}>
+              <View style={styles.guestAuthIconBg}>
+                <Feather name="lock" size={26} color="#4F46E5" />
+              </View>
+              <Text style={styles.guestAuthTitle}>Sign In Required</Text>
+              <Text style={styles.guestAuthDesc}>
+                {`Please sign in or create an account to use ${guestActionName} and save your health records.`}
+              </Text>
+
+              <TouchableOpacity
+                style={styles.guestAuthMainBtn}
+                onPress={() => {
+                  setShowGuestAuthModal(false);
+                  navigation.navigate('Login');
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.guestAuthMainBtnText}>Sign In / Register</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.guestAuthCloseBtn}
+                onPress={() => setShowGuestAuthModal(false)}
+              >
+                <Text style={styles.guestAuthCloseText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1259,6 +1977,7 @@ function ActionSheetItem({ icon, title, desc, onPress }: ActionSheetItemProps) {
 }
 
 interface MedicationListItemProps {
+  id?: string;
   name: string;
   dosage: string;
   time: string;
@@ -1266,10 +1985,26 @@ interface MedicationListItemProps {
   onToggle?: () => void;
   slot?: string;
   date?: string;
+  imageUri?: string;
   onDelete?: () => void;
+  onImageUpdate?: (newUri: string | undefined) => void;
 }
 
-function MedicationListItem({ name, dosage, time, taken, onToggle, slot, date, onDelete }: MedicationListItemProps) {
+function MedicationListItem({
+  id,
+  name,
+  dosage,
+  time,
+  taken,
+  onToggle,
+  slot,
+  date,
+  imageUri,
+  onDelete,
+  onImageUpdate,
+}: MedicationListItemProps) {
+  const [previewVisible, setPreviewVisible] = useState(false);
+
   // Determine status label and color dynamically
   let statusLabel = taken ? 'Taken' : 'Pending';
   let statusColor = taken ? '#10B981' : '#F59E0B';
@@ -1281,9 +2016,9 @@ function MedicationListItem({ name, dosage, time, taken, onToggle, slot, date, o
         const today = new Date();
         remDate.setHours(0, 0, 0, 0);
         today.setHours(0, 0, 0, 0);
-        const diffTime = today.getTime() - remDate.getTime();
+        const diffTime = remDate.getTime() - today.getTime();
         const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-        if (diffDays >= 2) {
+        if (diffDays >= 1) {
           statusLabel = 'Upcoming';
           statusColor = '#3B82F6';
         }
@@ -1291,32 +2026,125 @@ function MedicationListItem({ name, dosage, time, taken, onToggle, slot, date, o
     } catch (_) {}
   }
 
+  const handlePickImage = () => {
+    Alert.alert(
+      'Medicine Photo',
+      `Add or change photo for ${name}`,
+      [
+        {
+          text: 'Take Photo',
+          onPress: async () => {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission Denied', 'Camera permission is required to take a medicine photo.');
+              return;
+            }
+            const res = await ImagePicker.launchCameraAsync({
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.8,
+            });
+            if (!res.canceled && res.assets && res.assets[0].uri) {
+              onImageUpdate?.(res.assets[0].uri);
+            }
+          },
+        },
+        {
+          text: 'Choose from Gallery',
+          onPress: async () => {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission Denied', 'Gallery permission is required to choose a medicine photo.');
+              return;
+            }
+            const res = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.8,
+            });
+            if (!res.canceled && res.assets && res.assets[0].uri) {
+              onImageUpdate?.(res.assets[0].uri);
+            }
+          },
+        },
+        ...(imageUri
+          ? [
+              {
+                text: 'Remove Photo',
+                style: 'destructive' as const,
+                onPress: () => onImageUpdate?.(undefined),
+              },
+            ]
+          : []),
+        { text: 'Cancel', style: 'cancel' as const },
+      ]
+    );
+  };
+
   return (
     <View style={styles.medItemCard}>
       <View style={styles.medItemHeader}>
-        <View style={styles.medItemIconBg}>
-          <MaterialCommunityIcons name="pill" size={24} color="#4F46E5" />
-        </View>
+        {/* Medicine Icon or Photo Thumbnail */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => (imageUri ? setPreviewVisible(true) : handlePickImage())}
+          style={[styles.medItemIconBg, !imageUri && { backgroundColor: '#F3E8FF', borderWidth: 1, borderColor: '#E9D5FF' }]}
+        >
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={{ width: 44, height: 44, borderRadius: 12 }} />
+          ) : (
+            <View style={{ position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
+              <MaterialCommunityIcons name="pill" size={24} color="#7E22CE" />
+              <View style={{ position: 'absolute', bottom: -5, right: -6, backgroundColor: '#7E22CE', borderRadius: 7, padding: 2.5, borderWidth: 1.5, borderColor: '#FFFFFF' }}>
+                <Feather name="camera" size={9} color="#FFFFFF" />
+              </View>
+            </View>
+          )}
+        </TouchableOpacity>
+
         <View style={styles.medItemNameCol}>
           <Text style={styles.medItemName}>{name}</Text>
           <Text style={styles.medItemDosage}>{dosage}</Text>
-          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-            {slot && (
+
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 6, alignItems: 'center' }}>
+            {!!slot && (
               <View style={styles.slotBadge}>
                 <Text style={styles.slotBadgeText}>{slot}</Text>
               </View>
             )}
-            {date && (
+            {!!date && (
               <View style={[styles.slotBadge, { backgroundColor: '#F0FDF4', borderColor: '#DCFCE7' }]}>
                 <Text style={[styles.slotBadgeText, { color: '#15803D' }]}>{date}</Text>
               </View>
             )}
+            <TouchableOpacity
+              onPress={handlePickImage}
+              activeOpacity={0.8}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 3,
+                paddingHorizontal: 8,
+                borderRadius: 8,
+                backgroundColor: imageUri ? '#F8FAFC' : '#F3E8FF',
+                borderWidth: 1,
+                borderColor: imageUri ? '#CBD5E1' : '#C084FC',
+              }}
+            >
+              <Feather name="camera" size={11} color={imageUri ? '#475569' : '#7E22CE'} style={{ marginRight: 4 }} />
+              <Text style={{ fontSize: 11, fontWeight: '700', color: imageUri ? '#475569' : '#7E22CE' }}>
+                {imageUri ? 'View / Change Photo' : '📷 Add Medicine Photo'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
+
         <View style={styles.medItemTimeBadge}>
           <Text style={styles.medItemTimeText}>{time}</Text>
         </View>
       </View>
+
       <View style={styles.medItemFooter}>
         <Text style={styles.medItemStatus}>
           Status: <Text style={{ color: statusColor, fontWeight: '700' }}>{statusLabel}</Text>
@@ -1340,6 +2168,33 @@ function MedicationListItem({ name, dosage, time, taken, onToggle, slot, date, o
           )}
         </View>
       </View>
+
+      {/* Full Screen Image Preview Modal */}
+      {!!imageUri && (
+        <Modal visible={previewVisible} transparent animationType="fade" onRequestClose={() => setPreviewVisible(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+            <TouchableOpacity
+              style={{ position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20 }}
+              onPress={() => setPreviewVisible(false)}
+            >
+              <Feather name="x" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Image source={{ uri: imageUri }} style={{ width: '90%', height: '60%', borderRadius: 16, resizeMode: 'contain' }} />
+            <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginTop: 16 }}>{name}</Text>
+            <Text style={{ color: '#CBD5E1', fontSize: 14, marginTop: 4 }}>{dosage}</Text>
+            <TouchableOpacity
+              style={{ marginTop: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: '#4F46E5', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 }}
+              onPress={() => {
+                setPreviewVisible(false);
+                setTimeout(handlePickImage, 300);
+              }}
+            >
+              <Feather name="edit-2" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={{ color: '#FFFFFF', fontWeight: '600', fontSize: 13 }}>Change Photo</Text>
+            </TouchableOpacity>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -1412,6 +2267,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  dashboardDisclaimerText: {
+    textAlign: 'center',
+    color: '#94A3B8',
+    fontSize: 11,
+    lineHeight: 16,
+    marginHorizontal: 24,
+    marginTop: 20,
+    marginBottom: 8,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1421,6 +2285,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F7FAFC',
+  },
+  searchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    height: 72,
+    marginTop: Platform.OS === 'ios' ? 10 : 0,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1E293B',
+    paddingVertical: 8,
+  },
+  closeSearchBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#E2E8F0',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -1827,86 +2713,182 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '700',
   },
-  assistantBannerContainer: {
-    paddingHorizontal: 20,
-    marginTop: 24,
-  },
-  assistantBanner: {
-    backgroundColor: '#EEF2F6',
-    borderRadius: 24,
-    padding: 16,
+  disclaimerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 16,
+    padding: 14,
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 20,
   },
-  botIconWrapper: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
+  disclaimerIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FEF3C7',
     alignItems: 'center',
-    position: 'relative',
+    justifyContent: 'center',
     marginRight: 12,
   },
-  botPulse: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#10B981',
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
-  },
-  assistantDetails: {
+  disclaimerText: {
     flex: 1,
-    marginRight: 8,
+    fontSize: 12,
+    color: '#92400E',
+    lineHeight: 18,
   },
-  botTitleRow: {
+  disclaimerTitle: {
+    fontWeight: '700',
+    color: '#B45309',
+  },
+  upgradeBannerContainer: {
+    marginHorizontal: 20,
+    marginTop: 24,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  demoDataNotice: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 20,
+    marginTop: 14,
     marginBottom: 4,
   },
-  botTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1A202C',
-    marginRight: 6,
+  demoDataNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#3730A3',
+    lineHeight: 17,
   },
-  betaBadge: {
-    backgroundColor: '#E0E7FF',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  betaText: {
-    color: '#4F46E5',
-    fontSize: 8,
-    fontWeight: '800',
-  },
-  botDesc: {
-    fontSize: 10,
-    color: '#718096',
-    lineHeight: 14,
-  },
-  botStartBtn: {
+  guestAuthCard: {
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  guestAuthIconBg: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  guestAuthTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1A202C',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  guestAuthDesc: {
+    fontSize: 13,
+    color: '#718096',
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 20,
+  },
+  guestAuthMainBtn: {
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#4F46E5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  guestAuthMainBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  guestAuthCloseBtn: {
+    paddingVertical: 10,
+  },
+  guestAuthCloseText: {
+    color: '#A0AEC0',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  guestProfileLoginBtn: {
+    flexDirection: 'row',
+    height: 44,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: '#4F46E5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+  },
+  guestProfileLoginText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  upgradeBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#A0AEC0',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    justifyContent: 'space-between',
+    padding: 18,
+    borderRadius: 24,
   },
-  botStartBtnText: {
-    color: '#4F46E5',
+  upgradeBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  crownIconBg: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  upgradeDetails: {
+    marginLeft: 14,
+    flex: 1,
+    paddingRight: 8,
+  },
+  upgradeTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  upgradeDesc: {
     fontSize: 11,
-    fontWeight: '700',
-    marginRight: 4,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 4,
+    lineHeight: 15,
+  },
+  upgradeRightBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bottomTabBar: {
     position: 'absolute',
@@ -2448,6 +3430,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 4,
   },
+  historyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EEF2F6',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  historyBtnText: {
+    color: '#4F46E5',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   manualAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2567,4 +3564,357 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+
+  // === Notifications Modal ===
+  notifModalContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  notifHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 48 : 16,
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  notifHeaderIconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  notifSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  closeNotifBtn: {
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+  },
+  notifEmptyCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    paddingTop: 100,
+  },
+  notifEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#475569',
+    marginTop: 16,
+  },
+  notifEmptySubtitle: {
+    fontSize: 13,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  notifCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  notifIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E293B',
+    flex: 1,
+    marginRight: 8,
+  },
+  notifCardTime: {
+    fontSize: 11,
+    color: '#94A3B8',
+  },
+  notifCardDesc: {
+    fontSize: 13,
+    color: '#475569',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+
+  // === Medication History Modal ===
+  historyModalContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 48 : 16,
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  historyHeaderIconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  historySubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  closeHistoryBtn: {
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+  },
+  historyCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  historyLoadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#64748B',
+  },
+  historyEmptyCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    paddingTop: 100,
+  },
+  historyEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#475569',
+    marginTop: 16,
+  },
+  historyEmptySubtitle: {
+    fontSize: 13,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  historyDateGroup: {
+    marginBottom: 20,
+  },
+  historyDateLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  historyLogCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  historyLogInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 12,
+  },
+  historyLogIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyLogName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  historyLogTime: {
+    fontSize: 11,
+    color: '#64748B',
+    marginLeft: 4,
+  },
+  historyLogDot: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginLeft: 4,
+  },
+  historyStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  historyStatusBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
 });
+
+interface EmailVerificationModalProps {
+  visible: boolean;
+  email: string;
+  onVerified: (user: any) => void;
+  onLogout: () => void;
+}
+
+function EmailVerificationModal({ visible, email, onVerified, onLogout }: EmailVerificationModalProps) {
+  const [timer, setTimer] = useState(600);
+  const [canResend, setCanResend] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let interval: any;
+    if (visible && timer > 0) {
+      interval = setInterval(() => {
+        setTimer((prev) => prev - 1);
+      }, 1000);
+    } else if (timer === 0) {
+      setCanResend(true);
+    }
+    return () => clearInterval(interval);
+  }, [visible, timer]);
+
+  const handleCheckStatus = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const res = await apiProfile.getProfile();
+      if (res && res.success && res.user) {
+        if (res.user.email_verified_at) {
+          onVerified(res.user);
+          Alert.alert('Success', 'Email verified successfully! Welcome to CareMate AI.');
+        } else {
+          Alert.alert(
+            'Verification Pending',
+            'Your email is not verified yet. Please click the verification link in your email and try again.'
+          );
+        }
+      } else {
+        Alert.alert('Error', 'Failed to retrieve verification status');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to check verification status');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const res = await apiAuth.resendVerification(email);
+      if (res.success) {
+        setTimer(600);
+        setCanResend(false);
+        Alert.alert('Link Sent', 'A new email verification link has been sent to your email.');
+      } else {
+        Alert.alert('Error', res.message || 'Failed to resend link');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Resend failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!visible) return null;
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent={false}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FF', justifyContent: 'center', paddingHorizontal: 24 }}>
+        <View style={{ alignItems: 'center', marginBottom: 40 }}>
+          <View style={{ width: 85, height: 85, borderRadius: 42.5, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+            <Feather name="mail" size={42} color="#4F46E5" />
+          </View>
+          <Text style={{ fontSize: 24, fontWeight: '700', color: '#1E293B', marginBottom: 12, textAlign: 'center' }}>Verify Your Email</Text>
+          <Text style={{ fontSize: 14, color: '#64748B', textAlign: 'center', paddingHorizontal: 15, lineHeight: 22 }}>
+            We have sent a verification link to your email address: {'\n'}
+            <Text style={{ fontWeight: '700', color: '#1E293B' }}>{email}</Text>
+            {'\n\n'}Please click the link in your email to verify and activate your account.
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          style={{
+            height: 52,
+            borderRadius: 12,
+            backgroundColor: '#4F46E5',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 20,
+          }}
+          disabled={loading}
+          onPress={handleCheckStatus}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={{ fontSize: 16, fontWeight: '600', color: '#FFFFFF' }}>I Have Verified</Text>
+          )}
+        </TouchableOpacity>
+
+        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 40 }}>
+          <Text style={{ fontSize: 14, color: '#64748B' }}>{"Didn't receive link? "}</Text>
+          {canResend ? (
+            <TouchableOpacity onPress={handleResend}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: '#4F46E5' }}>Resend Link</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={{ fontSize: 14, fontWeight: '600', color: '#4F46E5' }}>
+              {`Resend in ${Math.floor(timer / 60)}m ${timer % 60}s`}
+            </Text>
+          )}
+        </View>
+
+        <TouchableOpacity onPress={onLogout} style={{ alignItems: 'center' }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: '#EF4444' }}>Log Out</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    </Modal>
+  );
+}

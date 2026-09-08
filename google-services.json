@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "997392276690",
+    "project_id": "caremateai-858ee",
+    "storage_bucket": "caremateai-858ee.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:997392276690:android:97f4c56ef6b731e264210b",
+        "android_client_info": {
+          "package_name": "com.caremateai.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "997392276690-k8ftjc65csbe44al3ru0ohrfo5pu0peh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.caremateai.app",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "997392276690-pkbop05dvimftiafa9hj1ih1u14le395.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.caremateai.app",
+            "certificate_hash": "80436e5688badbf9094dfe1ec5c23d395dd89fac"
+          }
+        },
+        {
+          "client_id": "997392276690-chqgup5tk1t0ag2hs19om8vhauoqvbp6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDHWNhfdF4N2XxQYq1ow3Ndsy-JBn5otfs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "997392276690-chqgup5tk1t0ag2hs19om8vhauoqvbp6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

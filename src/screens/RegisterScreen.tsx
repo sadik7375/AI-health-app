@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ScrollView, StatusBar,
-  Alert, ActivityIndicator,
+  Alert, ActivityIndicator, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -48,8 +48,12 @@ export default function RegisterScreen({ navigation }: Props) {
 
     if (!result.success) {
       Alert.alert('Registration Failed', result.message || 'Could not create account. Please try again.');
+    } else {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Dashboard' }],
+      });
     }
-    // On success, AuthContext sets isAuthenticated = true → AppNavigator auto-switches to AppStack
   };
 
   return (
@@ -68,7 +72,7 @@ export default function RegisterScreen({ navigation }: Props) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
-          <Text style={styles.subtitle}>Join AI Health Vault to manage your health records intelligently.</Text>
+          <Text style={styles.subtitle}>Join CareMate AI to manage your health records intelligently.</Text>
 
           {/* Full Name */}
           <Text style={styles.label}>Full Name</Text>
@@ -143,14 +147,29 @@ export default function RegisterScreen({ navigation }: Props) {
           </View>
 
           {/* Terms checkbox */}
-          <TouchableOpacity style={styles.checkboxRow} onPress={() => setAgreeTerms(!agreeTerms)} activeOpacity={0.8}>
-            <View style={[styles.checkbox, agreeTerms && styles.checkboxActive]}>
-              {agreeTerms && <Feather name="check" size={14} color="#FFFFFF" />}
-            </View>
+          <View style={styles.checkboxRow}>
+            <TouchableOpacity onPress={() => setAgreeTerms(!agreeTerms)} activeOpacity={0.8}>
+              <View style={[styles.checkbox, agreeTerms && styles.checkboxActive]}>
+                {agreeTerms && <Feather name="check" size={14} color="#FFFFFF" />}
+              </View>
+            </TouchableOpacity>
             <Text style={styles.checkboxLabel}>
-              I agree to the <Text style={styles.linkText}>Terms & Conditions</Text> and <Text style={styles.linkText}>Privacy Policy</Text>
+              I agree to the{' '}
+              <Text 
+                style={styles.linkText}
+                onPress={() => Linking.openURL('https://cannyapps.com/caremate-ai-terms/')}
+              >
+                Terms &amp; Conditions
+              </Text>{' '}
+              and{' '}
+              <Text 
+                style={styles.linkText} 
+                onPress={() => Linking.openURL('https://cannyapps.com/caremate-ai-privacy-policy')}
+              >
+                Privacy Policy
+              </Text>
             </Text>
-          </TouchableOpacity>
+          </View>
 
           {/* Create Account Button */}
           <TouchableOpacity

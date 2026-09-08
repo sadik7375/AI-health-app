@@ -13,14 +13,22 @@ import {
   Platform,
   KeyboardAvoidingView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons, FontAwesome } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { useNavigation } from '@react-navigation/native';
 import { healthStore, Appointment } from '../store/healthStore';
-import { Audio } from 'expo-av';
+let Audio: any = null;
+try {
+  Audio = require('expo-av').Audio;
+} catch (e) {
+  console.warn('expo-av native module not available in Expo Go:', e);
+}
 import { apiAppointments } from '../api/apiClient';
+import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -41,6 +49,7 @@ function getFirstDayOfMonth(year: number, month: number) {
 
 // ────────────────────────────────────────────────────────────
 export default function AppointmentsScreen({ navigation }: Props) {
+  const { user } = useAuth();
   const [tab, setTab] = useState<'Upcoming' | 'Past'>('Upcoming');
   const [appointments, setAppointments] = useState<Appointment[]>(healthStore.getAppointments());
 
@@ -172,6 +181,8 @@ function AddAppointmentModal({ visible, onClose, onSaved }: {
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { user } = useAuth();
+  const navigation = useNavigation<any>();
   const [mode, setMode]   = useState<AddMode>('Manual');
   const [step, setStep]   = useState<AddStep>('Form');
   const [isListening, setIsListening] = useState(false);
@@ -195,7 +206,9 @@ function AddAppointmentModal({ visible, onClose, onSaved }: {
   const [selAmPm,  setSelAmPm]  = useState<'AM'|'PM'>('AM');
 
   const [isParsing, setIsParsing] = useState(false);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingRef = useRef<any | null>(null);
+
+  const isValidDate = (d: Date | null) => d !== null && d instanceof Date && !isNaN(d.getTime());
 
   const reset = () => {
     setMode('Manual'); setStep('Form'); setIsListening(false); setIsParsing(false);
@@ -216,6 +229,10 @@ function AddAppointmentModal({ visible, onClose, onSaved }: {
 
   const startRecording = async () => {
     try {
+      if (!Audio) {
+        Alert.alert('Voice Mode', 'Voice recording requires a standalone or development build.');
+        return;
+      }
       const permission = await Audio.requestPermissionsAsync();
       if (permission.status !== 'granted') {
         alert('Microphone permission is required to use Voice Mode.');
@@ -316,15 +333,15 @@ function AddAppointmentModal({ visible, onClose, onSaved }: {
 
   // Save appointment
   const saveAppointment = () => {
-    if (!form.dateTime || !form.doctorName.trim()) return;
+    if (!isValidDate(form.dateTime) || !form.doctorName.trim()) return;
     healthStore.addAppointment({
       doctorName: form.doctorName.trim(),
       specialty: '',
       clinic: form.clinic.trim(),
-      dateTime: form.dateTime.toISOString(),
+      dateTime: form.dateTime!.toISOString(),
       reason: form.reason.trim(),
       reminder: form.reminder,
-      isPast: form.dateTime < new Date(),
+      isPast: form.dateTime! < new Date(),
     });
     setStep('Success');
   };
@@ -333,8 +350,8 @@ function AddAppointmentModal({ visible, onClose, onSaved }: {
   const firstDay    = getFirstDayOfMonth(calYear, calMonth);
 
   const formatDateTime = (d: Date | null) => {
-    if (!d) return 'Select date and time';
-    return d.toLocaleString('en-US', { month:'long', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    if (!isValidDate(d)) return 'Select date and time';
+    return d!.toLocaleString('en-US', { month:'long', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
   };
 
   const reminderLabel = (r: FormData['reminder']) =>
@@ -360,7 +377,7 @@ function AddAppointmentModal({ visible, onClose, onSaved }: {
 
             {/* Month nav */}
             <View style={styles.monthRow}>
-              <Text style={styles.monthLabel}>{MONTHS[calMonth]} {calYear}</Text>
+              <Text style={styles.monthLabel}>{`${MONTHS[calMonth]} ${calYear}`}</Text>
               <View style={styles.monthNav}>
                 <TouchableOpacity onPress={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(y=>y-1); } else setCalMonth(m=>m-1); }}>
                   <Feather name="chevron-left" size={20} color="#6366F1" />
@@ -530,7 +547,16 @@ function AddAppointmentModal({ visible, onClose, onSaved }: {
                 <TouchableOpacity
                   key={m}
                   style={[styles.modeBtn, mode === m && styles.modeBtnActive]}
-                  onPress={() => setMode(m)}
+                  onPress={() => {
+                    const plan = user?.plan_tier?.toLowerCase() ?? 'free';
+                    if (m === 'Voice' && plan !== 'basic' && plan !== 'premium' && plan !== 'pro' && plan !== 'family') {
+                      reset();
+                      onClose();
+                      navigation.navigate('UpgradePlan');
+                      return;
+                    }
+                    setMode(m);
+                  }}
                 >
                   {m === 'Manual'
                     ? <Feather name="edit-3" size={15} color={mode === m ? '#FFFFFF' : '#6366F1'} style={{ marginRight: 6 }} />
@@ -563,9 +589,8 @@ function AddAppointmentModal({ visible, onClose, onSaved }: {
                   <Text style={styles.fieldLabel}>Date &amp; Time</Text>
                   <TouchableOpacity style={styles.fieldRow} onPress={() => setStep('DateTime')}>
                     <Feather name="calendar" size={16} color="#A0AEC0" style={{ marginRight: 10 }} />
-                    <Text style={[styles.fieldInput, !form.dateTime && { color: '#A0AEC0' }]}>
-                      {formatDateTime(form.dateTime)}
-                    </Text>
+                    <Text style={[styles.fieldInput, !isValidDate(form.dateTime) && { color: '#A0AEC0' }]}>
+                      {formatDateTime(form.dateTime)}</Text>
                     <Feather name="chevron-right" size={16} color="#A0AEC0" />
                   </TouchableOpacity>
 
@@ -646,10 +671,10 @@ function AddAppointmentModal({ visible, onClose, onSaved }: {
               )}
 
               <TouchableOpacity
-                style={[styles.saveBtn, (!form.doctorName.trim() || !form.dateTime) && mode === 'Manual' && styles.saveBtnDisabled]}
+                style={[styles.saveBtn, (!form.doctorName.trim() || !isValidDate(form.dateTime)) && styles.saveBtnDisabled]}
                 activeOpacity={0.85}
-                onPress={() => { if (form.doctorName.trim() && form.dateTime) setStep('Review'); }}
-                disabled={mode === 'Manual' && (!form.doctorName.trim() || !form.dateTime)}
+                onPress={() => { if (form.doctorName.trim() && isValidDate(form.dateTime)) setStep('Review'); }}
+                disabled={!form.doctorName.trim() || !isValidDate(form.dateTime)}
               >
                 <Text style={styles.saveBtnText}>Save Appointment</Text>
               </TouchableOpacity>

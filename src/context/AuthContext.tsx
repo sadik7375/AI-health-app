@@ -27,6 +27,7 @@ interface AuthUser {
   weight?: string;
   allergies?: string;
   medical_conditions?: string;
+  email_verified_at?: string | null;
 }
 
 interface AuthContextType {
@@ -34,6 +35,7 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  loginWithToken: (token: string, user: AuthUser) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => Promise<void>;
   updateUser: (updatedUser: AuthUser) => Promise<void>;
@@ -84,15 +86,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await apiAuth.login({ email, password });
 
-      if (response && response.success) {
-        const { token: newToken, user: newUser } = response;
+      const newToken = response?.token || response?.access_token || response?.data?.token || response?.data?.access_token;
+      const newUser  = response?.user  || response?.data?.user || (response?.success && response?.data);
 
-        setToken(newToken);
-        setUser(newUser);
-        setAuthToken(newToken);
+      if (response && (response.success || newToken)) {
+        if (newToken) setToken(newToken);
+        if (newUser)  setUser(newUser);
+        if (newToken) setAuthToken(newToken);
 
-        await AsyncStorage.setItem('auth_token', newToken);
-        await AsyncStorage.setItem('auth_user', JSON.stringify(newUser));
+        if (newToken) await AsyncStorage.setItem('auth_token', newToken);
+        if (newUser)  await AsyncStorage.setItem('auth_user', JSON.stringify(newUser));
 
         // Sync fresh data from backend
         healthStore.syncWithBackend();
@@ -111,15 +114,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await apiAuth.register({ name, email, password });
 
-      if (response && response.success) {
-        const { token: newToken, user: newUser } = response;
+      const newToken = response?.token || response?.access_token || response?.data?.token || response?.data?.access_token;
+      const newUser  = response?.user  || response?.data?.user || (response?.success && response?.data);
 
-        setToken(newToken);
-        setUser(newUser);
-        setAuthToken(newToken);
+      if (response && (response.success || newToken)) {
+        if (newToken) setToken(newToken);
+        if (newUser)  setUser(newUser);
+        if (newToken) setAuthToken(newToken);
 
-        await AsyncStorage.setItem('auth_token', newToken);
-        await AsyncStorage.setItem('auth_user', JSON.stringify(newUser));
+        if (newToken) await AsyncStorage.setItem('auth_token', newToken);
+        if (newUser)  await AsyncStorage.setItem('auth_user', JSON.stringify(newUser));
 
         // Sync fresh data from backend
         healthStore.syncWithBackend();
@@ -150,12 +154,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem('auth_user', JSON.stringify(newUser));
   };
 
+  const loginWithToken = async (newToken: string, newUser: AuthUser) => {
+    setToken(newToken);
+    setUser(newUser);
+    setAuthToken(newToken);
+
+    await AsyncStorage.setItem('auth_token', newToken);
+    await AsyncStorage.setItem('auth_user', JSON.stringify(newUser));
+
+    // Sync fresh data from backend
+    healthStore.syncWithBackend();
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
       token,
       isLoading,
       login,
+      loginWithToken,
       register,
       logout,
       updateUser,

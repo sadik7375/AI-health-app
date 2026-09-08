@@ -20,6 +20,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { apiAIAssistant } from '../api/apiClient';
 import { healthStore } from '../store/healthStore';
+import { useAuth } from '../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
@@ -40,20 +42,26 @@ interface ChatMessage {
 }
 
 export default function AIHealthAssistantScreen({ navigation }: Props) {
+  const { user } = useAuth();
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
 
   // Initial chat history simulating rich assistant capabilities
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: '1',
-      sender: 'ai',
-      text: 'Hi Abdul! 👋 I am your AI Health Assistant. How can I help you with your health, medicines, or reports today?',
-      time: '9:30 AM',
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  useEffect(() => {
+    const dispName = user?.name || 'Sadik';
+    setMessages([
+      {
+        id: '1',
+        sender: 'ai',
+        text: `Hi ${dispName}! 👋 I am your AI Health Assistant. How can I help you with your health, medicines, or reports today?`,
+        time: '9:30 AM',
+      }
+    ]);
+  }, [user]);
 
   const getTodayMedsData = () => {
     const activeReminders = healthStore.getReminders();
@@ -73,10 +81,53 @@ export default function AIHealthAssistantScreen({ navigation }: Props) {
     ];
   };
 
+  const checkAndIncrementMessageLimit = async () => {
+    const plan = user?.plan_tier?.toLowerCase() ?? 'free';
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    const monthKey = `ai_chatbot_msg_count_${currentYear}_${currentMonth}`;
+    
+    try {
+      if (plan === 'free') {
+        const stored = await AsyncStorage.getItem('ai_chatbot_msg_count_free');
+        const count = stored ? parseInt(stored, 10) : 0;
+        if (count >= 1) {
+          navigation.navigate('UpgradePlan');
+          return false;
+        }
+        await AsyncStorage.setItem('ai_chatbot_msg_count_free', (count + 1).toString());
+      } else if (plan === 'basic' || plan === 'pro') {
+        const stored = await AsyncStorage.getItem(monthKey);
+        const count = stored ? parseInt(stored, 10) : 0;
+        if (count >= 20) {
+          navigation.navigate('UpgradePlan');
+          return false;
+        }
+        await AsyncStorage.setItem(monthKey, (count + 1).toString());
+      } else if (plan === 'premium' || plan === 'family') {
+        const stored = await AsyncStorage.getItem(monthKey);
+        const count = stored ? parseInt(stored, 10) : 0;
+        if (count >= 30) {
+          Alert.alert(
+            'Monthly Limit Reached',
+            'Premium plan is limited to 30 AI Assistant messages per month.',
+            [{ text: 'OK' }]
+          );
+          return false;
+        }
+        await AsyncStorage.setItem(monthKey, (count + 1).toString());
+      }
+    } catch (_) {}
+    return true;
+  };
+
   // Send User Message
-  const sendMessage = (customText?: string, messageType?: ChatMessage['type'], extraData?: any) => {
+  const sendMessage = async (customText?: string, messageType?: ChatMessage['type'], extraData?: any) => {
     const textToSend = customText || inputText;
     if (!textToSend.trim() && !messageType) return;
+
+    const allowed = await checkAndIncrementMessageLimit();
+    if (!allowed) return;
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -228,7 +279,7 @@ export default function AIHealthAssistantScreen({ navigation }: Props) {
               <View style={styles.heroAvatarBg}>
                 <MaterialCommunityIcons name="robot-happy" size={48} color="#4F46E5" />
               </View>
-              <Text style={styles.heroGreeting}>Hi Abdul! 👋</Text>
+              <Text style={styles.heroGreeting}>Hi {user?.name || 'Sadik'}! 👋</Text>
               <Text style={styles.heroSubtitle}>How can I help you today?</Text>
             </View>
           )}
@@ -244,7 +295,7 @@ export default function AIHealthAssistantScreen({ navigation }: Props) {
 
               <View style={[styles.msgBubble, msg.sender === 'user' ? styles.userBubble : styles.aiBubble]}>
                 {/* Text Message */}
-                {msg.text && (
+                {!!msg.text && (
                   <Text style={[styles.msgText, msg.sender === 'user' ? styles.userMsgText : styles.aiMsgText]}>
                     {msg.text}
                   </Text>

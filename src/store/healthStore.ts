@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
 
 export interface MedicineInfo {
   name: string;
@@ -47,6 +48,17 @@ export interface MedicationReminder {
   status: 'Taken' | 'Upcoming' | 'As Needed';
   slot?: string;
   date?: string;
+  imageUri?: string;
+}
+
+export interface MedicineLogEntry {
+  id: string;
+  medicineId?: string;
+  name: string;
+  time: string;
+  status: 'taken' | 'missed';
+  logDate: string;
+  takenAt?: string;
 }
 
 export interface LabParameter {
@@ -71,6 +83,18 @@ export interface LabReport {
 
 import { apiMedicines, apiAppointments, apiLabReports, apiAuth, apiPrescriptions, apiRequest } from '../api/apiClient';
 
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+} catch (_) {}
+
 type Listener = () => void;
 
 class HealthStore {
@@ -87,6 +111,8 @@ class HealthStore {
     night: '08:00 PM',
   };
 
+  public reminderBefore: string = '0min';
+
   constructor() {
     this.loadSlotTimes();
     // Attempt automatic background sync with Laravel backend API
@@ -101,6 +127,10 @@ class HealthStore {
         if (parsed.morning) this.slotTimes.morning = parsed.morning;
         if (parsed.afternoon) this.slotTimes.afternoon = parsed.afternoon;
         if (parsed.night) this.slotTimes.night = parsed.night;
+      }
+      const savedBefore = await AsyncStorage.getItem('reminder_before');
+      if (savedBefore) {
+        this.reminderBefore = savedBefore;
       }
     } catch (_) {}
   }
@@ -120,8 +150,17 @@ class HealthStore {
       if (prescRes.status === 'fulfilled' && prescRes.value?.success) {
         const backendPrescs = prescRes.value.data;
         if (backendPrescs) {
-          // If we got real data from the backend, clear out mock data and replace
-          this.prescriptions = backendPrescs;
+          // Map backend prescriptions so imageUri is always populated correctly
+          this.prescriptions = backendPrescs.map((p: any) => ({
+            ...p,
+            id: p.id ? p.id.toString() : `p_${Date.now()}`,
+            doctor: p.doctor || p.doctor_name || 'Doctor',
+            clinic: p.clinic || p.clinic_name || 'Clinic',
+            date: p.date || p.prescription_date || (p.created_at ? p.created_at.substring(0, 10) : ''),
+            status: p.status || 'Saved Only',
+            imageUri: p.imageUri || p.image_path || p.image_url || p.image || undefined,
+            medicines: Array.isArray(p.medicines) ? p.medicines : [],
+          }));
           hasSyncedAny = true;
         }
       }
@@ -139,7 +178,26 @@ class HealthStore {
             type: m.time?.toLowerCase() === 'as needed' ? 'sos' : 'daily',
             status: m.taken ? 'Taken' : (m.time?.toLowerCase() === 'as needed' ? 'As Needed' : 'Upcoming'),
             slot: m.raw_notes || undefined,
-            date: m.created_at ? new Date(m.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined,
+            date: (() => {
+              if (m.time?.toLowerCase() === 'as needed') {
+                return m.created_at ? new Date(m.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined;
+              }
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+
+              const rawStartDate = m.start_date || m.created_at;
+              if (rawStartDate) {
+                const startDate = new Date(rawStartDate);
+                if (!isNaN(startDate.getTime())) {
+                  const compareDate = new Date(startDate);
+                  compareDate.setHours(0, 0, 0, 0);
+                  if (compareDate > today) {
+                    return compareDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+                  }
+                }
+              }
+              return new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+            })(),
           }));
           hasSyncedAny = true;
         }
@@ -182,6 +240,7 @@ class HealthStore {
       }
 
       this.isSynced = true;
+      this.scheduleAllNotifications();
       this.notify();
     } catch (_) {
       // Backend not active yet - gracefully keep local mock state
@@ -194,6 +253,34 @@ class HealthStore {
 
   getReminders(): MedicationReminder[] {
     return this.reminders;
+  }
+
+  updateReminderImage(id: string, imageUri?: string) {
+    const rem = this.reminders.find(r => r.id === id);
+    if (rem) {
+      rem.imageUri = imageUri;
+      this.notify();
+    }
+  }
+
+  async getMedicationHistory(): Promise<MedicineLogEntry[]> {
+    try {
+      const res = await apiMedicines.getHistory();
+      if (res && res.success && res.history) {
+        return res.history.map((log: any) => ({
+          id: log.id.toString(),
+          medicineId: log.medicine_id ? log.medicine_id.toString() : undefined,
+          name: log.name,
+          time: log.time,
+          status: log.status,
+          logDate: log.log_date ? log.log_date.substring(0, 10) : '',
+          takenAt: log.taken_at || undefined,
+        }));
+      }
+    } catch (err) {
+      console.warn("Failed to fetch medication history:", err);
+    }
+    return [];
   }
 
   getAppointments(): Appointment[] {
@@ -232,8 +319,18 @@ class HealthStore {
     this.listeners.forEach(l => l());
   }
 
-  addPrescription(prescription: Prescription) {
-    this.prescriptions = [prescription, ...this.prescriptions];
+  addPrescription(prescription: any) {
+    const mapped: Prescription = {
+      ...prescription,
+      id: prescription.id ? prescription.id.toString() : `p_${Date.now()}`,
+      doctor: prescription.doctor || prescription.doctor_name || 'Doctor',
+      clinic: prescription.clinic || prescription.clinic_name || 'Clinic',
+      date: prescription.date || prescription.prescription_date || new Date().toISOString().substring(0, 10),
+      status: prescription.status || 'Saved Only',
+      imageUri: prescription.imageUri || prescription.image_path || prescription.image_url || prescription.image || undefined,
+      medicines: Array.isArray(prescription.medicines) ? prescription.medicines : [],
+    };
+    this.prescriptions = [mapped, ...this.prescriptions];
     this.notify();
   }
 
@@ -262,6 +359,7 @@ class HealthStore {
     };
     this.reminders = [...this.reminders, newReminder];
     this.notify();
+    this.scheduleAllNotifications();
 
     try {
       await apiMedicines.addManual({
@@ -286,6 +384,7 @@ class HealthStore {
       return r;
     });
     this.notify();
+    this.scheduleAllNotifications();
 
     try {
       await apiMedicines.toggleTaken(id);
@@ -309,6 +408,7 @@ class HealthStore {
       return r;
     });
     this.notify();
+    this.scheduleAllNotifications();
 
     try {
       await apiMedicines.update(id, updated);
@@ -318,6 +418,7 @@ class HealthStore {
   async deleteReminder(id: string) {
     this.reminders = this.reminders.filter(r => r.id !== id);
     this.notify();
+    this.scheduleAllNotifications();
 
     try {
       await apiMedicines.delete(id);
@@ -388,7 +489,8 @@ class HealthStore {
             taken: false,
             type: 'sos',
             status: 'As Needed',
-            slot: 'As Needed'
+            slot: 'As Needed',
+            date: new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
           });
         } else {
           med.timings.forEach((timeKey, tIdx) => {
@@ -410,7 +512,8 @@ class HealthStore {
               taken: false,
               type: 'daily',
               status: 'Upcoming',
-              slot: timeKey
+              slot: timeKey,
+              date: new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
             });
           });
         }
@@ -418,6 +521,7 @@ class HealthStore {
 
       this.reminders = [...newReminders, ...this.reminders];
       this.notify();
+      this.scheduleAllNotifications();
     }
   }
 
@@ -542,11 +646,102 @@ class HealthStore {
       return r;
     });
     this.notify();
+    this.scheduleAllNotifications();
 
     // 4. Update existing reminders in Laravel backend
     try {
       await apiRequest('/medicines/update-slot-times', 'POST', { morning, afternoon, night });
     } catch (_) {}
+  }
+
+  async updateReminderBefore(value: string) {
+    this.reminderBefore = value;
+    try {
+      await AsyncStorage.setItem('reminder_before', value);
+    } catch (_) {}
+    this.notify();
+    this.scheduleAllNotifications();
+  }
+
+  async scheduleAllNotifications() {
+    try {
+      // 1. Cancel all existing scheduled notifications first
+      await Notifications.cancelAllScheduledNotificationsAsync();
+
+      // 2. Request permission
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') return;
+
+      // 3. Set up notification channel for Android (sound, vibration, priority)
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('medicine-reminders', {
+          name: 'Medicine Reminders',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 500, 250, 500, 250, 500, 250, 500],
+          lightColor: '#6366F1',
+          sound: 'default',
+          bypassDnd: true,
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        });
+      }
+
+      // 4. Schedule recurring daily notification for each active reminder
+      for (const rem of this.reminders) {
+        if (rem.taken) continue; // Don't schedule if already taken today
+
+        const timeStr = rem.time;
+        if (!timeStr) continue;
+
+        const pts = timeStr.split(' ');
+        if (pts.length !== 2) continue;
+        const hm = pts[0].split(':');
+        if (hm.length !== 2) continue;
+
+        let hours = parseInt(hm[0], 10);
+        let minutes = parseInt(hm[1], 10);
+        const ampm = pts[1].toUpperCase();
+
+        if (ampm === 'PM' && hours !== 12) {
+          hours += 12;
+        } else if (ampm === 'AM' && hours === 12) {
+          hours = 0;
+        }
+
+        // Apply "reminderBefore" offset
+        if (this.reminderBefore && this.reminderBefore !== '0min') {
+          const beforeMinutes = parseInt(this.reminderBefore, 10);
+          if (!isNaN(beforeMinutes)) {
+            minutes -= beforeMinutes;
+            if (minutes < 0) {
+              minutes += 60;
+              hours -= 1;
+              if (hours < 0) {
+                hours += 24;
+              }
+            }
+          }
+        }
+
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: `Time for your medicine: ${rem.name}! 💊`,
+            body: `Dosage: ${rem.dosage}. Please take it now.`,
+            data: { reminderId: rem.id },
+            sound: true,
+            priority: Notifications.AndroidNotificationPriority.MAX,
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+            hour: hours,
+            minute: minutes,
+            repeats: true,
+            channelId: 'medicine-reminders',
+          },
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to schedule notifications:", err);
+    }
   }
 
   clearData() {

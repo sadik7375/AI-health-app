@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,14 @@ import {
   Dimensions,
   Share,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { healthStore } from '../store/healthStore';
+import { apiHealthAnalytics } from '../api/apiClient';
 
 const { width } = Dimensions.get('window');
 
@@ -27,46 +29,47 @@ type TimeFilter = 'THIS_WEEK' | 'THIS_MONTH' | 'ALL_TIME';
 
 export default function HealthAnalyticsReportScreen({ navigation }: Props) {
   const [filter, setFilter] = useState<TimeFilter>('THIS_WEEK');
+  const [loading, setLoading] = useState(true);
+  const [healthScore, setHealthScore] = useState(80);
+  const [adherenceRate, setAdherenceRate] = useState('100%');
+  const [labNormalcy, setLabNormalcy] = useState('100%');
+  const [dangerZoneItems, setDangerZoneItems] = useState<any[]>([]);
+  const [missedMeds, setMissedMeds] = useState<any[]>([]);
+  const [takenCount, setTakenCount] = useState(0);
+  const [missedCount, setMissedCount] = useState(0);
 
-  // Mock analytics data
-  const healthScore = 82; // Out of 100
   const scoreCategory = healthScore >= 80 ? 'Good' : healthScore >= 60 ? 'Moderate' : 'Critical';
   const scoreColor = healthScore >= 80 ? '#10B981' : healthScore >= 60 ? '#F59E0B' : '#EF4444';
 
-  const missedMeds = [
-    { id: 'm1', name: 'Metformin 500mg', time: 'Yesterday, 08:00 PM', reason: 'Dose Skipped' },
-    { id: 'm2', name: 'Vitamin D3 1000 IU', time: '18 May, 08:00 PM', reason: 'Dose Skipped' },
-    { id: 'm3', name: 'Atorvastatin 20mg', time: '15 May, 10:00 PM', reason: 'Out of Stock' },
-  ];
+  useEffect(() => {
+    fetchAnalytics();
+  }, []);
 
-  const dangerZoneItems = [
-    {
-      id: 'd1',
-      title: 'High Total Cholesterol',
-      value: '248 mg/dL',
-      ref: 'Normal: < 200 mg/dL',
-      severity: 'HIGH',
-      date: '10 May 2026',
-      source: 'Lipid Profile Report',
-      recommendation: 'Low-fat diet & consultation with Dr. Michael Brown advised.',
-    },
-    {
-      id: 'd2',
-      title: 'Fasting Blood Sugar Elevated',
-      value: '7.2 mmol/L',
-      ref: 'Normal: 3.9 - 6.1 mmol/L',
-      severity: 'HIGH',
-      date: '05 May 2026',
-      source: 'Blood Glucose Test',
-      recommendation: 'Monitor carbohydrate intake and re-test after 14 days.',
-    },
-  ];
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true);
+      const res = await apiHealthAnalytics.getAnalytics();
+      if (res && res.success) {
+        setHealthScore(res.health_score ?? 80);
+        setAdherenceRate(res.adherence_rate ?? '100%');
+        setLabNormalcy(res.lab_normalcy ?? '100%');
+        setDangerZoneItems(res.danger_alerts ?? []);
+        setMissedMeds(res.missed_doses ?? []);
+        setTakenCount(res.taken_count ?? 0);
+        setMissedCount(res.missed_count ?? 0);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch health analytics:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleShareReport = async () => {
     try {
       await Share.share({
         title: 'Health Executive Summary Report',
-        message: `📋 AI Health Vault Summary Report\nHealth Score: ${healthScore}/100 (${scoreCategory})\nMissed Doses: ${missedMeds.length}\nDanger Zone Alerts: ${dangerZoneItems.length}\n\nDownloaded via AI Health Vault App.`,
+        message: `📋 CareMate AI Summary Report\nHealth Score: ${healthScore}/100 (${scoreCategory})\nMissed Doses: ${missedMeds.length}\nDanger Zone Alerts: ${dangerZoneItems.length}\n\nDownloaded via CareMate AI App.`,
       });
     } catch (_) {}
   };
@@ -101,144 +104,166 @@ export default function HealthAnalyticsReportScreen({ navigation }: Props) {
         ))}
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-
-        {/* ════════════════════════════════════════════════════════
-            1. OVERALL HEALTH SCORE CARD
-           ════════════════════════════════════════════════════════ */}
-        <View style={styles.scoreCard}>
-          <View style={styles.scoreCardHeader}>
-            <View>
-              <Text style={styles.scoreLabel}>OVERALL HEALTH SCORE</Text>
-              <Text style={styles.scoreSubLabel}>Updated based on labs & adherence</Text>
-            </View>
-            <View style={[styles.statusBadge, { backgroundColor: scoreColor + '22' }]}>
-              <Text style={[styles.statusBadgeText, { color: scoreColor }]}>{scoreCategory}</Text>
-            </View>
-          </View>
-
-          <View style={styles.scoreGaugeRow}>
-            {/* Big Circular Score */}
-            <View style={[styles.scoreCircle, { borderColor: scoreColor }]}>
-              <Text style={styles.scoreValueText}>{healthScore}</Text>
-              <Text style={styles.scoreMaxText}>/100</Text>
-            </View>
-
-            {/* Score Metrics Breakdown */}
-            <View style={styles.scoreMetricsCol}>
-              <MetricItem label="Medicine Adherence" percent="85%" color="#10B981" />
-              <MetricItem label="Lab Test Normalcy" percent="78%" color="#F59E0B" />
-              <MetricItem label="Vitals Stability" percent="92%" color="#3B82F6" />
-            </View>
-          </View>
+      {loading ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F9FF' }}>
+          <ActivityIndicator size="large" color="#4F46E5" />
+          <Text style={{ fontSize: 14, color: '#718096', marginTop: 12, fontWeight: '600' }}>Loading health report analytics...</Text>
         </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* ════════════════════════════════════════════════════════
-            2. DANGER ZONE / ATTENTION NEEDED
-           ════════════════════════════════════════════════════════ */}
-        <View style={styles.sectionHeader}>
-          <View style={[styles.sectionIconBg, { backgroundColor: '#FEE2E2' }]}>
-            <MaterialCommunityIcons name="alert-decagram-outline" size={18} color="#EF4444" />
-          </View>
-          <Text style={styles.sectionTitle}>Danger Zone &amp; Risk Alerts</Text>
-          <View style={styles.dangerCountBadge}>
-            <Text style={styles.dangerCountText}>{dangerZoneItems.length} High Risks</Text>
-          </View>
-        </View>
-
-        {dangerZoneItems.map((item) => (
-          <View key={item.id} style={styles.dangerCard}>
-            <View style={styles.dangerCardTop}>
-              <View style={styles.dangerTag}>
-                <Feather name="alert-triangle" size={12} color="#EF4444" style={{ marginRight: 4 }} />
-                <Text style={styles.dangerTagText}>{item.severity}</Text>
+          {/* ════════════════════════════════════════════════════════
+              1. OVERALL HEALTH SCORE CARD
+             ════════════════════════════════════════════════════════ */}
+          <View style={styles.scoreCard}>
+            <View style={styles.scoreCardHeader}>
+              <View>
+                <Text style={styles.scoreLabel}>OVERALL HEALTH SCORE</Text>
+                <Text style={styles.scoreSubLabel}>Updated based on labs & adherence</Text>
               </View>
-              <Text style={styles.dangerDate}>{item.date}</Text>
-            </View>
-
-            <Text style={styles.dangerTitle}>{item.title}</Text>
-            <View style={styles.dangerValueRow}>
-              <Text style={styles.dangerValue}>{item.value}</Text>
-              <Text style={styles.dangerRef}>{item.ref}</Text>
-            </View>
-
-            <Text style={styles.dangerSource}>Source: {item.source}</Text>
-
-            <View style={styles.recommendBox}>
-              <Feather name="info" size={14} color="#D97706" style={{ marginRight: 6, marginTop: 2 }} />
-              <Text style={styles.recommendText}>{item.recommendation}</Text>
-            </View>
-          </View>
-        ))}
-
-        {/* ════════════════════════════════════════════════════════
-            3. MISSED MEDICINE TRACKER
-           ════════════════════════════════════════════════════════ */}
-        <View style={styles.sectionHeader}>
-          <View style={[styles.sectionIconBg, { backgroundColor: '#FEF3C7' }]}>
-            <MaterialCommunityIcons name="pill-off" size={18} color="#D97706" />
-          </View>
-          <Text style={styles.sectionTitle}>Missed Medicine Tracker</Text>
-        </View>
-
-        <View style={styles.medSummaryCard}>
-          {/* Stats Bar */}
-          <View style={styles.medStatsRow}>
-            <View style={styles.medStatItem}>
-              <Text style={[styles.medStatVal, { color: '#10B981' }]}>24</Text>
-              <Text style={styles.medStatLbl}>Taken</Text>
-            </View>
-            <View style={styles.medStatDivider} />
-            <View style={styles.medStatItem}>
-              <Text style={[styles.medStatVal, { color: '#EF4444' }]}>{missedMeds.length}</Text>
-              <Text style={styles.medStatLbl}>Missed</Text>
-            </View>
-            <View style={styles.medStatDivider} />
-            <View style={styles.medStatItem}>
-              <Text style={[styles.medStatVal, { color: '#3B82F6' }]}>85%</Text>
-              <Text style={styles.medStatLbl}>Adherence</Text>
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          <Text style={styles.missedListTitle}>Missed Doses Details:</Text>
-          {missedMeds.map((m) => (
-            <View key={m.id} style={styles.missedRow}>
-              <View style={styles.missedIconBg}>
-                <Feather name="x-circle" size={16} color="#EF4444" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.missedName}>{m.name}</Text>
-                <Text style={styles.missedTime}>{m.time}</Text>
-              </View>
-              <View style={styles.reasonBadge}>
-                <Text style={styles.reasonText}>{m.reason}</Text>
+              <View style={[styles.statusBadge, { backgroundColor: scoreColor + '22' }]}>
+                <Text style={[styles.statusBadgeText, { color: scoreColor }]}>{scoreCategory}</Text>
               </View>
             </View>
-          ))}
-        </View>
 
-        {/* ════════════════════════════════════════════════════════
-            4. QUICK ACTION & LAB SUMMARY
-           ════════════════════════════════════════════════════════ */}
-        <TouchableOpacity
-          style={styles.labCtaBanner}
-          onPress={() => navigation.navigate('LabReport')}
-          activeOpacity={0.88}
-        >
-          <View style={styles.labCtaIconBg}>
-            <MaterialCommunityIcons name="flask-outline" size={24} color="#FFFFFF" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.labCtaTitle}>View All Lab Reports</Text>
-            <Text style={styles.labCtaSub}>Access scanned images, OCR text &amp; export PDF</Text>
-          </View>
-          <Feather name="chevron-right" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
+            <View style={styles.scoreGaugeRow}>
+              {/* Big Circular Score */}
+              <View style={[styles.scoreCircle, { borderColor: scoreColor }]}>
+                <Text style={styles.scoreValueText}>{healthScore}</Text>
+                <Text style={styles.scoreMaxText}>/100</Text>
+              </View>
 
-        <View style={{ height: 40 }} />
-      </ScrollView>
+              {/* Score Metrics Breakdown */}
+              <View style={styles.scoreMetricsCol}>
+                <MetricItem label="Medicine Adherence" percent={adherenceRate} color="#10B981" />
+                <MetricItem label="Lab Test Normalcy" percent={labNormalcy} color="#F59E0B" />
+                <MetricItem label="Vitals Stability" percent="92%" color="#3B82F6" />
+              </View>
+            </View>
+          </View>
+
+          {/* ════════════════════════════════════════════════════════
+              2. DANGER ZONE / ATTENTION NEEDED
+             ════════════════════════════════════════════════════════ */}
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconBg, { backgroundColor: '#FEE2E2' }]}>
+              <MaterialCommunityIcons name="alert-decagram-outline" size={18} color="#EF4444" />
+            </View>
+            <Text style={styles.sectionTitle}>Danger Zone &amp; Risk Alerts</Text>
+            <View style={styles.dangerCountBadge}>
+              <Text style={styles.dangerCountText}>{dangerZoneItems.length} High Risks</Text>
+            </View>
+          </View>
+
+          {dangerZoneItems.length === 0 ? (
+            <View style={{ backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, alignItems: 'center', marginBottom: 20 }}>
+              <Feather name="shield" size={32} color="#10B981" />
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A202C', marginTop: 8 }}>All Vitals Clear</Text>
+              <Text style={{ fontSize: 12, color: '#718096', marginTop: 2 }}>No abnormal laboratory parameters found.</Text>
+            </View>
+          ) : (
+            dangerZoneItems.map((item) => (
+              <View key={item.id} style={styles.dangerCard}>
+                <View style={styles.dangerCardTop}>
+                  <View style={styles.dangerTag}>
+                    <Feather name="alert-triangle" size={12} color="#EF4444" style={{ marginRight: 4 }} />
+                    <Text style={styles.dangerTagText}>{item.severity}</Text>
+                  </View>
+                  <Text style={styles.dangerDate}>{item.date}</Text>
+                </View>
+
+                <Text style={styles.dangerTitle}>{item.title}</Text>
+                <View style={styles.dangerValueRow}>
+                  <Text style={styles.dangerValue}>{item.value}</Text>
+                  <Text style={styles.dangerRef}>{item.ref}</Text>
+                </View>
+
+                <Text style={styles.dangerSource}>Source: {item.source}</Text>
+
+                <View style={styles.recommendBox}>
+                  <Feather name="info" size={14} color="#D97706" style={{ marginRight: 6, marginTop: 2 }} />
+                  <Text style={styles.recommendText}>{item.recommendation}</Text>
+                </View>
+              </View>
+            ))
+          )}
+
+          {/* ════════════════════════════════════════════════════════
+              3. MISSED MEDICINE TRACKER
+             ════════════════════════════════════════════════════════ */}
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconBg, { backgroundColor: '#FEF3C7' }]}>
+              <MaterialCommunityIcons name="pill-off" size={18} color="#D97706" />
+            </View>
+            <Text style={styles.sectionTitle}>Missed Medicine Tracker</Text>
+          </View>
+
+          <View style={styles.medSummaryCard}>
+            {/* Stats Bar */}
+            <View style={styles.medStatsRow}>
+              <View style={styles.medStatItem}>
+                <Text style={[styles.medStatVal, { color: '#10B981' }]}>{takenCount}</Text>
+                <Text style={styles.medStatLbl}>Taken</Text>
+              </View>
+              <View style={styles.medStatDivider} />
+              <View style={styles.medStatItem}>
+                <Text style={[styles.medStatVal, { color: '#EF4444' }]}>{missedCount}</Text>
+                <Text style={styles.medStatLbl}>Missed</Text>
+              </View>
+              <View style={styles.medStatDivider} />
+              <View style={styles.medStatItem}>
+                <Text style={[styles.medStatVal, { color: '#3B82F6' }]}>{adherenceRate}</Text>
+                <Text style={styles.medStatLbl}>Adherence</Text>
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            <Text style={styles.missedListTitle}>Missed Doses Details:</Text>
+            {missedMeds.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 10 }}>
+                <Feather name="check-circle" size={24} color="#10B981" />
+                <Text style={{ fontSize: 13, color: '#718096', marginTop: 6, fontWeight: '600' }}>Great job! No missed doses.</Text>
+              </View>
+            ) : (
+              missedMeds.map((m) => (
+                <View key={m.id} style={styles.missedRow}>
+                  <View style={styles.missedIconBg}>
+                    <Feather name="x-circle" size={16} color="#EF4444" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.missedName}>{m.name}</Text>
+                    <Text style={styles.missedTime}>{m.time}</Text>
+                  </View>
+                  <View style={styles.reasonBadge}>
+                    <Text style={styles.reasonText}>{m.reason}</Text>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+
+          {/* ════════════════════════════════════════════════════════
+              4. QUICK ACTION & LAB SUMMARY
+             ════════════════════════════════════════════════════════ */}
+          <TouchableOpacity
+            style={styles.labCtaBanner}
+            onPress={() => navigation.navigate('LabReport')}
+            activeOpacity={0.88}
+          >
+            <View style={styles.labCtaIconBg}>
+              <MaterialCommunityIcons name="flask-outline" size={24} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.labCtaTitle}>View All Lab Reports</Text>
+              <Text style={styles.labCtaSub}>Access scanned images, OCR text &amp; export PDF</Text>
+            </View>
+            <Feather name="chevron-right" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }

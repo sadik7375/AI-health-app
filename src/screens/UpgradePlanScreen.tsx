@@ -20,12 +20,12 @@ interface Props {
 
 export default function UpgradePlanScreen({ navigation }: Props) {
   const [billingCycle, setBillingCycle] = useState<'MONTHLY' | 'YEARLY'>('YEARLY');
-  const [selectedPlan, setSelectedPlan] = useState<'FREE' | 'PRO' | 'FAMILY'>('PRO');
+  const [selectedPlan, setSelectedPlan] = useState<'FREE' | 'BASIC' | 'PREMIUM'>('PREMIUM');
 
-  const handleSelectPlan = (planName: string) => {
+  const handleSelectPlan = (planName: string, price: string) => {
     Alert.alert(
       'Plan Selected',
-      `You selected the ${planName} plan (${billingCycle.toLowerCase()}). Redirecting to payment...`,
+      `You selected the ${planName} plan (${billingCycle.toLowerCase()}) for ${price}. Redirecting to payment...`,
       [{ text: 'OK' }]
     );
   };
@@ -71,24 +71,24 @@ export default function UpgradePlanScreen({ navigation }: Props) {
             onPress={() => setBillingCycle('YEARLY')}
           >
             <Text style={[styles.billingText, billingCycle === 'YEARLY' && styles.billingTextActive]}>
-              Yearly (Save 20%)
+              Yearly
             </Text>
             <View style={styles.saveBadge}>
-              <Text style={styles.saveBadgeText}>SAVE 20%</Text>
+              <Text style={styles.saveBadgeText}>SAVE 30%</Text>
             </View>
           </TouchableOpacity>
         </View>
 
         {/* ════════════════════════════════════════════════════════
-            3 PRICING PLANS
+            3 PRICING PLAN CARDS (RESTORED CARD-BASED DESIGN)
            ════════════════════════════════════════════════════════ */}
 
-        {/* PLAN 1: STARTER (FREE) */}
+        {/* PLAN 1: FREE */}
         <View style={[styles.planCard, selectedPlan === 'FREE' && styles.planCardSelected]}>
           <View style={styles.planHeader}>
             <View>
-              <Text style={styles.planName}>Starter Plan</Text>
-              <Text style={styles.planDesc}>Basic health vault for individuals</Text>
+              <Text style={styles.planName}>Free Plan</Text>
+              <Text style={styles.planDesc}>Basic health tracking & reminders</Text>
             </View>
             <View style={styles.priceWrap}>
               <Text style={styles.priceVal}>$0</Text>
@@ -99,12 +99,13 @@ export default function UpgradePlanScreen({ navigation }: Props) {
           <View style={styles.divider} />
 
           <View style={styles.featureList}>
-            <FeatureRow text="3 Prescription Scans / Month" active />
-            <FeatureRow text="Basic Medicine Reminders" active />
-            <FeatureRow text="Manual Doctor Appointments" active />
-            <FeatureRow text="Single User Profile" active />
-            <FeatureRow text="AI Health Assistant Chatbot" active={false} />
-            <FeatureRow text="Danger & Risk Alerts" active={false} />
+            <FeatureRow text="1 Prescription Scan (Lifetime limit)" active />
+            <FeatureRow text="1 Lab Report Scan (Lifetime limit)" active />
+            <FeatureRow text="Active Medicine Reminders" active />
+            <FeatureRow text="Prescription Document History" active />
+            <FeatureRow text="Unlimited Manual Appointments" active />
+            <FeatureRow text="Voice Appointment Bookings" active={false} />
+            <FeatureRow text="AI Health Chatbot (1 message limit)" active={false} />
           </View>
 
           <TouchableOpacity
@@ -115,91 +116,110 @@ export default function UpgradePlanScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* PLAN 2: PRO (POPULAR ⭐) */}
-        <View style={[styles.planCard, styles.proCard, selectedPlan === 'PRO' && styles.planCardSelected]}>
-          {/* Popular Tag */}
-          <View style={styles.popularBadge}>
-            <MaterialCommunityIcons name="star" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
-            <Text style={styles.popularText}>MOST POPULAR</Text>
-          </View>
-
+        {/* PLAN 2: BASIC ($5/Mo) */}
+        <View style={[styles.planCard, selectedPlan === 'BASIC' && styles.planCardSelected]}>
           <View style={styles.planHeader}>
-            <View>
-              <Text style={[styles.planName, { color: '#4F46E5' }]}>Pro Health Plan</Text>
-              <Text style={styles.planDesc}>For power users &amp; smart tracking</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.planName, { color: '#4A5568' }]}>Basic Plan</Text>
+              <Text style={styles.planDesc}>Enhanced tracking for individuals</Text>
             </View>
             <View style={styles.priceWrap}>
-              <Text style={[styles.priceVal, { color: '#4F46E5' }]}>
-                {billingCycle === 'YEARLY' ? '$3.99' : '$4.99'}
-              </Text>
-              <Text style={styles.pricePeriod}>/month</Text>
+              {billingCycle === 'YEARLY' ? (
+                <>
+                  <Text style={[styles.priceVal, { color: '#4A5568' }]}>$3.50</Text>
+                  <Text style={styles.originalPrice}>$5.00</Text>
+                  <Text style={styles.pricePeriod}>/month (billed $42/yr)</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.priceVal, { color: '#4A5568' }]}>$5.00</Text>
+                  <Text style={styles.pricePeriod}>/month</Text>
+                </>
+              )}
             </View>
           </View>
 
           <View style={styles.divider} />
 
           <View style={styles.featureList}>
-            <FeatureRow text="Unlimited AI Prescription Scans" active />
-            <FeatureRow text="24/7 AI Health Assistant Chatbot" active />
-            <FeatureRow text="Advanced Risk & Danger Zone Alerts" active />
-            <FeatureRow text="Unlimited Lab Report OCR Extractions" active />
-            <FeatureRow text="PDF & Data Export" active />
-            <FeatureRow text="Priority Support" active />
+            <FeatureRow text="10 Prescription Scans / Month" active />
+            <FeatureRow text="10 Lab Report Scans / Month" active />
+            <FeatureRow text="Active Medicine Reminders" active />
+            <FeatureRow text="Prescription Document History" active />
+            <FeatureRow text="Unlimited Manual Appointments" active />
+            <FeatureRow text="Voice Appointment Bookings" active />
+            <FeatureRow text="AI Chatbot (20 messages / Month)" active />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.planBtn, styles.basicBtn]}
+            onPress={() => {
+              setSelectedPlan('BASIC');
+              handleSelectPlan('Basic', billingCycle === 'YEARLY' ? '$42.00/year' : '$5.00/month');
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.basicBtnText}>Choose Basic Plan</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* PLAN 3: PREMIUM ($10/Mo ⭐ RECOMMENDED) */}
+        <View style={[styles.planCard, styles.proCard, selectedPlan === 'PREMIUM' && styles.planCardSelected]}>
+          {/* Recommended Tag */}
+          <View style={styles.popularBadge}>
+            <MaterialCommunityIcons name="star" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
+            <Text style={styles.popularText}>RECOMMENDED</Text>
+          </View>
+
+          <View style={styles.planHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.planName, { color: '#4F46E5' }]}>Premium Plan</Text>
+              <Text style={styles.planDesc}>Full diagnostic OCR & advanced AI</Text>
+            </View>
+            <View style={styles.priceWrap}>
+              {billingCycle === 'YEARLY' ? (
+                <>
+                  <Text style={[styles.priceVal, { color: '#4F46E5' }]}>$7.00</Text>
+                  <Text style={styles.originalPrice}>$10.00</Text>
+                  <Text style={styles.pricePeriod}>/month (billed $84/yr)</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.priceVal, { color: '#4F46E5' }]}>$10.00</Text>
+                  <Text style={styles.pricePeriod}>/month</Text>
+                </>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.featureList}>
+            <FeatureRow text="30 Prescription Scans / Month" active />
+            <FeatureRow text="30 Lab Report Scans / Month" active />
+            <FeatureRow text="Active Medicine Reminders" active />
+            <FeatureRow text="Prescription Document History" active />
+            <FeatureRow text="Unlimited Manual Appointments" active />
+            <FeatureRow text="Voice Appointment Bookings" active />
+            <FeatureRow text="AI Chatbot (30 messages / Month)" active />
           </View>
 
           <TouchableOpacity
             style={[styles.planBtn, styles.proBtn]}
             onPress={() => {
-              setSelectedPlan('PRO');
-              handleSelectPlan('Pro Health');
+              setSelectedPlan('PREMIUM');
+              handleSelectPlan('Premium', billingCycle === 'YEARLY' ? '$84.00/year' : '$10.00/month');
             }}
             activeOpacity={0.85}
           >
-            <Text style={styles.proBtnText}>Upgrade to Pro</Text>
+            <Text style={styles.proBtnText}>Upgrade to Premium</Text>
             <Feather name="arrow-right" size={16} color="#FFFFFF" style={{ marginLeft: 6 }} />
-          </TouchableOpacity>
-        </View>
-
-        {/* PLAN 3: FAMILY CARE */}
-        <View style={[styles.planCard, selectedPlan === 'FAMILY' && styles.planCardSelected]}>
-          <View style={styles.planHeader}>
-            <View>
-              <Text style={styles.planName}>Family Care Plan</Text>
-              <Text style={styles.planDesc}>Full protection for your family</Text>
-            </View>
-            <View style={styles.priceWrap}>
-              <Text style={styles.priceVal}>
-                {billingCycle === 'YEARLY' ? '$7.99' : '$9.99'}
-              </Text>
-              <Text style={styles.pricePeriod}>/month</Text>
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.featureList}>
-            <FeatureRow text="Everything in Pro Plan" active />
-            <FeatureRow text="Up to 5 Family Member Profiles" active />
-            <FeatureRow text="Emergency SMS Alerts to Family" active />
-            <FeatureRow text="Dedicated Doctor Concierge Support" active />
-            <FeatureRow text="Unlimited Cloud Backup" active />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.planBtn, styles.familyBtn]}
-            onPress={() => {
-              setSelectedPlan('FAMILY');
-              handleSelectPlan('Family Care');
-            }}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.familyBtnText}>Get Family Plan</Text>
           </TouchableOpacity>
         </View>
 
         {/* Guarantee Info */}
         <View style={styles.guaranteeRow}>
-          <Feather name="shield-check" size={16} color="#059669" style={{ marginRight: 8 }} />
+          <MaterialCommunityIcons name="shield-check" size={18} color="#059669" style={{ marginRight: 8 }} />
           <Text style={styles.guaranteeText}>7-Day Money-Back Guarantee • Cancel Anytime</Text>
         </View>
 
@@ -257,7 +277,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 12,
   },
-  heroTitle: { fontSize: 22, fontWeight: '800', color: '#1A202C', textAlign: 'center' },
+  heroTitle: { fontSize: 20, fontWeight: '800', color: '#1A202C', textAlign: 'center' },
   heroSub: { fontSize: 13, color: '#718096', textAlign: 'center', marginTop: 4, lineHeight: 20 },
 
   // Billing Toggle
@@ -304,7 +324,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   proCard: { borderColor: '#4F46E5', backgroundColor: '#FAFAFF' },
-  planCardSelected: { shadowOpacity: 0.12, shadowRadius: 14, elevation: 5 },
+  planCardSelected: { shadowOpacity: 0.12, shadowRadius: 14, elevation: 5, borderColor: '#6366F1' },
 
   popularBadge: {
     position: 'absolute',
@@ -320,18 +340,19 @@ const styles = StyleSheet.create({
   popularText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
 
   planHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  planName: { fontSize: 18, fontWeight: '800', color: '#1A202C' },
-  planDesc: { fontSize: 12, color: '#718096', marginTop: 2 },
-  priceWrap: { alignItems: 'flex-end' },
+  planName: { fontSize: 17, fontWeight: '800', color: '#1A202C' },
+  planDesc: { fontSize: 11, color: '#718096', marginTop: 2, maxWidth: '65%' },
+  priceWrap: { alignItems: 'flex-end', minWidth: '35%' },
   priceVal: { fontSize: 24, fontWeight: '900', color: '#1A202C' },
-  pricePeriod: { fontSize: 11, color: '#718096' },
+  originalPrice: { fontSize: 12, color: '#A0AEC0', textDecorationLine: 'line-through', marginTop: 2 },
+  pricePeriod: { fontSize: 10, color: '#718096', marginTop: 2, textAlign: 'right' },
 
   divider: { height: 1, backgroundColor: '#F0F0F8', marginVertical: 16 },
 
   featureList: { gap: 10, marginBottom: 20 },
   featureRow: { flexDirection: 'row', alignItems: 'center' },
   featureText: { fontSize: 13, color: '#2D3748', fontWeight: '600' },
-  featureTextDisabled: { color: '#A0AEC0', textDecorationLine: 'line-through' },
+  featureTextDisabled: { color: '#CBD5E0', textDecorationLine: 'line-through' },
 
   planBtn: {
     height: 48,
@@ -343,6 +364,11 @@ const styles = StyleSheet.create({
   currentPlanBtn: { backgroundColor: '#F1F5F9' },
   currentPlanBtnText: { color: '#718096', fontSize: 14, fontWeight: '700' },
 
+  basicBtn: {
+    backgroundColor: '#4A5568',
+  },
+  basicBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+
   proBtn: {
     backgroundColor: '#4F46E5',
     shadowColor: '#4F46E5',
@@ -352,9 +378,6 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   proBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-
-  familyBtn: { backgroundColor: '#1A202C' },
-  familyBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
 
   guaranteeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   guaranteeText: { fontSize: 12, color: '#059669', fontWeight: '600' },

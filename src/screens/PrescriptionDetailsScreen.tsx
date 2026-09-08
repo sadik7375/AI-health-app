@@ -12,7 +12,7 @@ import {
   Modal,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
@@ -29,6 +29,7 @@ interface Props {
 }
 
 export default function PrescriptionDetailsScreen({ navigation, route }: Props) {
+  const insets = useSafeAreaInsets();
   const { prescriptionId } = route.params;
 
   const [showFullScreen, setShowFullScreen] = useState(false);
@@ -50,13 +51,15 @@ export default function PrescriptionDetailsScreen({ navigation, route }: Props) 
   };
 
   // Resolve backend server address dynamically for prescription images
-  const getFullImageUri = (uri?: string) => {
+  const getFullImageUri = (item?: any) => {
+    const uri = typeof item === 'string' ? item : (item?.imageUri || item?.image_path || item?.image_url || item?.image);
     if (!uri) return undefined;
     if (uri.startsWith('http://') || uri.startsWith('https://') || uri.startsWith('file://') || uri.startsWith('data:')) {
       return uri;
     }
-    const host = BASE_URL.replace('/api', '');
-    return `${host}${uri}`;
+    const host = BASE_URL.replace(/\/api\/?$/, '');
+    const cleanUri = uri.startsWith('/') ? uri : `/${uri}`;
+    return `${host}${cleanUri}`;
   };
 
   // Fetch prescription from store
@@ -156,9 +159,9 @@ export default function PrescriptionDetailsScreen({ navigation, route }: Props) 
         {/* Prescription Image */}
         <Text style={styles.sectionTitle}>Prescription Image</Text>
         <View style={styles.imageCard}>
-          {prescription.imageUri ? (
+          {getFullImageUri(prescription) ? (
             <Image 
-              source={{ uri: getFullImageUri(prescription.imageUri) }} 
+              source={{ uri: getFullImageUri(prescription) }} 
               style={styles.prescriptionImage}
               resizeMode="contain"
             />
@@ -232,9 +235,9 @@ export default function PrescriptionDetailsScreen({ navigation, route }: Props) 
 
           {/* Image Container */}
           <View style={styles.fullScreenImageContainer}>
-            {prescription.imageUri ? (
+            {getFullImageUri(prescription) ? (
               <Image 
-                source={{ uri: getFullImageUri(prescription.imageUri) }} 
+                source={{ uri: getFullImageUri(prescription) }} 
                 style={styles.fullScreenImage}
                 resizeMode="contain"
               />
@@ -246,7 +249,13 @@ export default function PrescriptionDetailsScreen({ navigation, route }: Props) 
       </Modal>
 
       {/* Bottom Actions */}
-      <View style={styles.bottomActions}>
+      <View style={[
+        styles.bottomActions, 
+        { 
+          paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 14),
+          height: 70 + Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 14)
+        }
+      ]}>
         <TouchableOpacity style={styles.shareBtn} activeOpacity={0.7}>
           <Feather name="share-2" size={20} color="#4F46E5" />
         </TouchableOpacity>
