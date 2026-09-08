@@ -21,7 +21,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.caremateai.app",
-      "versionCode": 23,
+      "versionCode": 24,
       "googleServicesFile": "./google-services.json"
     },
     "web": {
@@ -29,9 +29,10 @@
     },
     "plugins": [
       [
-        "@react-native-google-signin/google-signin",
+        "expo-notifications",
         {
-          "iosUrlScheme": "com.googleusercontent.apps.676610858328-g23aabte530pq49t9a7uqnmrbkqgo3fv"
+          "icon": "./assets/icon.png",
+          "color": "#4F46E5"
         }
       ],
       "expo-sharing",

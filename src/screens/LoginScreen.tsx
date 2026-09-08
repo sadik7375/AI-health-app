@@ -36,12 +36,12 @@ export default function LoginScreen({ navigation }: Props) {
   const [loading, setLoading]           = useState(false);
 
   useEffect(() => {
-    if (GoogleSignin) {
+    if (GoogleSignin && typeof GoogleSignin.configure === 'function') {
       try {
         GoogleSignin.configure({
           webClientId: '997392276690-chqgup5tk1t0ag2hs19om8vhauoqvbp6.apps.googleusercontent.com',
           offlineAccess: true,
-        });
+        }).catch(() => {});
       } catch (err) {
         console.warn("Failed to configure Google Sign-In:", err);
       }

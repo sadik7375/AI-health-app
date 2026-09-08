@@ -665,25 +665,34 @@ class HealthStore {
 
   async scheduleAllNotifications() {
     try {
-      // 1. Cancel all existing scheduled notifications first
-      await Notifications.cancelAllScheduledNotificationsAsync();
-
-      // 2. Request permission
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') return;
-
-      // 3. Set up notification channel for Android (sound, vibration, priority)
+      // 1. Set up notification channel for Android (sound, vibration, priority)
       if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('medicine-reminders', {
-          name: 'Medicine Reminders',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 500, 250, 500, 250, 500, 250, 500],
-          lightColor: '#6366F1',
-          sound: 'default',
-          bypassDnd: true,
-          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-        });
+        try {
+          await Notifications.setNotificationChannelAsync('medicine-reminders', {
+            name: 'Medicine Reminders',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 500, 250, 500, 250, 500, 250, 500],
+            lightColor: '#6366F1',
+            sound: 'default',
+            bypassDnd: true,
+            lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+          });
+        } catch (_) {}
       }
+
+      // 2. Cancel all existing scheduled notifications first
+      try {
+        await Notifications.cancelAllScheduledNotificationsAsync();
+      } catch (_) {}
+
+      // 3. Request permission
+      let status = 'denied';
+      try {
+        const res = await Notifications.requestPermissionsAsync();
+        status = res.status;
+      } catch (_) {}
+
+      if (status !== 'granted') return;
 
       // 4. Schedule recurring daily notification for each active reminder
       for (const rem of this.reminders) {
