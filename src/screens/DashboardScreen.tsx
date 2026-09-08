@@ -698,7 +698,7 @@ export default function DashboardScreen({ navigation, route }: Props) {
           </View>
         </View>
 
-        {/* Upgrade Plan CTA Banner */}
+        {/* HIDE: Upgrade Plan CTA Banner
         <TouchableOpacity 
           style={styles.upgradeBannerContainer} 
           activeOpacity={0.9} 
@@ -726,6 +726,7 @@ export default function DashboardScreen({ navigation, route }: Props) {
             </View>
           </LinearGradient>
         </TouchableOpacity>
+        */}
 
         {/* Medical Disclaimer Footer */}
         <View style={styles.disclaimerContainer}>
@@ -1337,11 +1338,13 @@ export default function DashboardScreen({ navigation, route }: Props) {
           </View>
 
           <View style={styles.profileMenu}>
+            {/* HIDE: Upgrade Plan
             <ProfileMenuItem
               icon={<MaterialCommunityIcons name="crown-outline" size={20} color="#D97706" />}
               label="Upgrade Plan"
               onPress={() => navigation.navigate('UpgradePlan')}
             />
+            */}
             <ProfileMenuItem
               icon={<Feather name="shield" size={20} color="#059669" />}
               label="Security & Privacy / Terms"
@@ -1414,11 +1417,13 @@ export default function DashboardScreen({ navigation, route }: Props) {
           label="Notifications Settings"
           onPress={() => navigation.navigate('NotificationSettings')}
         />
+        {/* HIDE: Upgrade Plan
         <ProfileMenuItem
           icon={<MaterialCommunityIcons name="crown-outline" size={20} color="#D97706" />}
           label="Upgrade Plan"
           onPress={() => navigation.navigate('UpgradePlan')}
         />
+        */}
         <ProfileMenuItem
           icon={<Feather name="help-circle" size={20} color="#8B5CF6" />}
           label="Help & Support"
