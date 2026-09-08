@@ -71,7 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAuthToken(savedToken); // register in apiClient for future requests
           
           // Sync existing data from backend in background
-          healthStore.syncWithBackend();
+          try {
+            healthStore.syncWithBackend();
+          } catch (_) {}
         }
       } catch (_) {
         // storage read fail — user must login again

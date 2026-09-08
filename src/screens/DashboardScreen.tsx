@@ -336,7 +336,9 @@ export default function DashboardScreen({ navigation, route }: Props) {
     if (h < 17) return 'Good Afternoon';
     return 'Good Evening';
   };
-  const firstName = user?.name ? (user.name.split(' ')[0] ?? 'User') : 'Guest';
+  const firstName = (typeof user?.name === 'string' && user.name.trim()) 
+    ? user.name.trim().split(/\s+/)[0] 
+    : 'Guest';
 
   // Add Action Handler
   const handleAddOption = (option: string) => {
