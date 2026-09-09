@@ -19,14 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons, FontAwesome } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { useNavigation } from '@react-navigation/native';
 import { healthStore, Appointment } from '../store/healthStore';
-let Audio: any = null;
-try {
-  Audio = require('expo-av').Audio;
-} catch (e) {
-  console.warn('expo-av native module not available in Expo Go:', e);
-}
 import { apiAppointments } from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
 
