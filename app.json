@@ -21,7 +21,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.caremateai.app",
-      "versionCode": 29,
+      "versionCode": 31,
       "googleServicesFile": "./google-services.json"
     },
     "web": {
