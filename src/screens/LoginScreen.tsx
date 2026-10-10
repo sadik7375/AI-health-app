@@ -184,8 +184,6 @@ export default function LoginScreen({ navigation }: Props) {
               : <Text style={styles.signInBtnText}>Sign In</Text>}
           </TouchableOpacity>
 
-          {/* HIDE: Continue with Google Button */}
-          {/* 
           <View style={styles.dividerRow}>
             <View style={styles.line} />
             <Text style={styles.orText}>or</Text>
@@ -200,8 +198,7 @@ export default function LoginScreen({ navigation }: Props) {
           >
             <AntDesign name="google" size={18} color="#000" style={{ marginRight: 8 }} />
             <Text style={styles.socialText}>Continue with Google</Text>
-          </TouchableOpacity> 
-          */}
+          </TouchableOpacity>
 
           {/* Sign up link */}
           <View style={styles.signupRow}>
@@ -220,7 +217,7 @@ export default function LoginScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
-  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 40 },
+  scroll: { flexGrow: 1, paddingHorizontal: 32, paddingBottom: 40 },
 
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, marginBottom: 32 },
   logoBadge: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#F0F4FF', alignItems: 'center', justifyContent: 'center' },

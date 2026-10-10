@@ -130,7 +130,8 @@ export default function LabReportScreen({ navigation }: Props) {
     const plan = user?.plan_tier?.toLowerCase() ?? 'free';
     
     if (plan === 'free') {
-      if (reports.length >= 10) {
+      const userScannedReports = reports.filter(r => !r.id.startsWith('dl'));
+      if (userScannedReports.length >= 2 || reports.length >= 2) {
         navigation.navigate('UpgradePlan');
         return false;
       }

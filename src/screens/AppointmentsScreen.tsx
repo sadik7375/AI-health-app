@@ -16,12 +16,18 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { Feather, MaterialCommunityIcons, FontAwesome } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { healthStore, Appointment } from '../store/healthStore';
 import { apiAppointments } from '../api/apiClient';
 import { useAuth } from '../context/AuthContext';
+
+let Audio: any = null;
+try {
+  Audio = require('expo-av').Audio;
+} catch (e) {}
 
 const { width } = Dimensions.get('window');
 
@@ -327,6 +333,15 @@ function AddAppointmentModal({ visible, onClose, onSaved }: {
   // Save appointment
   const saveAppointment = () => {
     if (!isValidDate(form.dateTime) || !form.doctorName.trim()) return;
+    const plan = user?.plan_tier?.toLowerCase() ?? 'free';
+    if (plan === 'free') {
+      const appts = healthStore.getAppointments();
+      if (appts.length >= 2) {
+        onClose();
+        navigation.navigate('UpgradePlan');
+        return;
+      }
+    }
     healthStore.addAppointment({
       doctorName: form.doctorName.trim(),
       specialty: '',

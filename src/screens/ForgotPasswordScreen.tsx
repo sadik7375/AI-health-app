@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center', // Fixed typo: justifyContent
   },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#1A202C' },
-  scroll: { paddingHorizontal: 22, paddingTop: 20 },
+  scroll: { paddingHorizontal: 32, paddingTop: 20 },
 
   // Progress Bar
   progressRow: {

@@ -563,7 +563,6 @@ export default function DashboardScreen({ navigation, route }: Props) {
             bgColor="#FEF3C7"
             onPress={() => handleAddOption('Lab Report Upload')}
           />
-          {/* HIDE: Doctor Appointment & AI Health Assistant
           <QuickActionButton
             icon={<FontAwesome name="user-md" size={24} color="#EF4444" />}
             label="Doctor Appointment"
@@ -576,7 +575,6 @@ export default function DashboardScreen({ navigation, route }: Props) {
             bgColor="#EEF2F6"
             onPress={() => handleAddOption('AI Health Assistant')}
           />
-          */}
         </View>
 
         {/* Today's Overview */}
@@ -596,7 +594,6 @@ export default function DashboardScreen({ navigation, route }: Props) {
             textColor="#6C5CE7"
             onPress={() => setCurrentTab('Medications')}
           />
-          {/* HIDE: Appointments Overview Card
           <OverviewCard
             icon={<Feather name="calendar" size={20} color="#10B981" />}
             title="Appointments"
@@ -605,7 +602,6 @@ export default function DashboardScreen({ navigation, route }: Props) {
             textColor="#10B981"
             onPress={() => handleAddOption('Appointments')}
           />
-          */}
           <OverviewCard
             icon={<MaterialCommunityIcons name="beaker-outline" size={20} color="#3B82F6" />}
             title="Reports"
@@ -626,7 +622,6 @@ export default function DashboardScreen({ navigation, route }: Props) {
 
         {/* Lab Reports Row */}
         <View style={styles.splitRow}>
-          {/* HIDE: Upcoming Appointment
           <View style={styles.splitCol}>
             <View style={styles.sectionHeaderSmall}>
               <Text style={styles.sectionTitleSmall}>Upcoming Appointment</Text>
@@ -669,7 +664,6 @@ export default function DashboardScreen({ navigation, route }: Props) {
               </TouchableOpacity>
             )}
           </View>
-          */}
 
           {/* Recent Lab Reports */}
           <View style={[styles.splitCol, { flex: 1 }]}>
@@ -700,7 +694,6 @@ export default function DashboardScreen({ navigation, route }: Props) {
           </View>
         </View>
 
-        {/* HIDE: Upgrade Plan CTA Banner
         <TouchableOpacity 
           style={styles.upgradeBannerContainer} 
           activeOpacity={0.9} 
@@ -728,7 +721,6 @@ export default function DashboardScreen({ navigation, route }: Props) {
             </View>
           </LinearGradient>
         </TouchableOpacity>
-        */}
 
         {/* Medical Disclaimer Footer */}
         <View style={styles.disclaimerContainer}>
@@ -1340,13 +1332,11 @@ export default function DashboardScreen({ navigation, route }: Props) {
           </View>
 
           <View style={styles.profileMenu}>
-            {/* HIDE: Upgrade Plan
             <ProfileMenuItem
               icon={<MaterialCommunityIcons name="crown-outline" size={20} color="#D97706" />}
               label="Upgrade Plan"
               onPress={() => navigation.navigate('UpgradePlan')}
             />
-            */}
             <ProfileMenuItem
               icon={<Feather name="shield" size={20} color="#059669" />}
               label="Security & Privacy / Terms"
@@ -1419,13 +1409,11 @@ export default function DashboardScreen({ navigation, route }: Props) {
           label="Notifications Settings"
           onPress={() => navigation.navigate('NotificationSettings')}
         />
-        {/* HIDE: Upgrade Plan
         <ProfileMenuItem
           icon={<MaterialCommunityIcons name="crown-outline" size={20} color="#D97706" />}
           label="Upgrade Plan"
           onPress={() => navigation.navigate('UpgradePlan')}
         />
-        */}
         <ProfileMenuItem
           icon={<Feather name="help-circle" size={20} color="#8B5CF6" />}
           label="Help & Support"
@@ -1628,14 +1616,12 @@ export default function DashboardScreen({ navigation, route }: Props) {
               desc="Store PDFs, images or lab files safely"
               onPress={() => handleAddOption('Upload Report')}
             />
-            {/* HIDE: Book Doctor Appointment
             <ActionSheetItem
               icon={<Feather name="calendar" size={22} color="#EF4444" />}
               title="Book Doctor Appointment"
               desc="Search doctors and schedule a visit"
               onPress={() => handleAddOption('Book Appointment')}
             />
-            */}
           </View>
         </TouchableOpacity>
       </Modal>

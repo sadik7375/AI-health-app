@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 56, borderBottomWidth: 1, borderBottomColor: '#F7FAFC' },
   backBtn: { padding: 8 },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#1A202C' },
-  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 40 },
+  scroll: { flexGrow: 1, paddingHorizontal: 32, paddingBottom: 40 },
   subtitle: { fontSize: 14, color: '#718096', marginTop: 16, marginBottom: 8, lineHeight: 20 },
 
   label: { fontSize: 14, fontWeight: '600', color: '#2D3748', marginBottom: 8, marginTop: 16 },

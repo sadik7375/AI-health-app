@@ -17,7 +17,6 @@ export default function NotificationSettingsScreen({ navigation }: Props) {
   const [medVibrate,     setMedVibrate]     = useState(true);
   const [reminderBefore, setReminderBefore] = useState(healthStore.reminderBefore);
   const [appUpdates,     setAppUpdates]     = useState(true);
-  const [newsletter,     setNewsletter]     = useState(false);
 
   // Default Slot Times State
   const [morningTime, setMorningTime] = useState(healthStore.slotTimes.morning);
@@ -180,10 +179,6 @@ export default function NotificationSettingsScreen({ navigation }: Props) {
           <ToggleRow icon="refresh-cw" iconBg="#EEF2FF" iconColor="#4F46E5"
              title="App Updates" sub="Get notified about new features"
              val={appUpdates} onToggle={setAppUpdates} />
-          <Divider />
-          <ToggleRow icon="mail" iconBg="#FEF3C7" iconColor="#D97706"
-             title="Newsletter" sub="Health articles and news"
-             val={newsletter} onToggle={setNewsletter} />
         </SectionCard>
 
         <View style={{ height: 40 }} />
