@@ -21,7 +21,8 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.caremateai.app",
-      "versionCode": 37,
+      "versionCode": 38,
+      "permissions": ["com.android.vending.BILLING"],
       "googleServicesFile": "./google-services.json"
     },
     "web": {
