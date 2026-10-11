@@ -21,7 +21,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.caremateai.app",
-      "versionCode": 40,
+      "versionCode": 41,
       "permissions": [
         "com.android.vending.BILLING"
       ],
