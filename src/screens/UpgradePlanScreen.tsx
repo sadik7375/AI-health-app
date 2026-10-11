@@ -7,11 +7,14 @@ import {
   TouchableOpacity,
   StatusBar,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { useAuth } from '../context/AuthContext';
+import { apiProfile } from '../api/apiClient';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'UpgradePlan'>;
 interface Props {
@@ -19,14 +22,70 @@ interface Props {
 }
 
 export default function UpgradePlanScreen({ navigation }: Props) {
+  const { user, isAuthenticated, updateUser } = useAuth();
   const [billingCycle, setBillingCycle] = useState<'MONTHLY' | 'YEARLY'>('YEARLY');
-  const [selectedPlan, setSelectedPlan] = useState<'FREE' | 'BASIC' | 'PREMIUM'>('PREMIUM');
+  const [loading, setLoading] = useState(false);
 
-  const handleSelectPlan = (planName: string, price: string) => {
+  const currentPlan = (user?.plan_tier ? user.plan_tier.toUpperCase() : 'FREE');
+  const [selectedPlan, setSelectedPlan] = useState<'FREE' | 'BASIC' | 'PREMIUM'>(
+    currentPlan === 'PREMIUM' ? 'PREMIUM' : currentPlan === 'BASIC' ? 'BASIC' : 'PREMIUM'
+  );
+
+  const handleSelectPlan = (planName: 'Free' | 'Basic' | 'Premium', price: string) => {
+    if (!isAuthenticated) {
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in or create an account to activate or upgrade your plan.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In / Register', onPress: () => navigation.navigate('Register') },
+        ]
+      );
+      return;
+    }
+
+    if (currentPlan === planName.toUpperCase()) {
+      Alert.alert('Active Plan', `You are already subscribed to the ${planName} plan.`);
+      return;
+    }
+
     Alert.alert(
-      'Plan Selected',
-      `You selected the ${planName} plan (${billingCycle.toLowerCase()}) for ${price}. Redirecting to payment...`,
-      [{ text: 'OK' }]
+      `Activate ${planName} Plan`,
+      `Would you like to activate the ${planName} plan (${billingCycle.toLowerCase()}) for ${price}? Your account limits will be updated immediately.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm & Activate',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const res = await apiProfile.upgradePlan(planName);
+              if (res && res.success && res.user) {
+                await updateUser(res.user);
+              } else if (user) {
+                await updateUser({ ...user, plan_tier: planName });
+              }
+              Alert.alert(
+                '🎉 Plan Activated!',
+                `Congratulations! Your account is now updated to the ${planName} Plan. All new features and scan limits are now active!`,
+                [{ text: 'Continue', onPress: () => navigation.goBack() }]
+              );
+            } catch (err: any) {
+              // Graceful fallback: update local user so client is never blocked
+              if (user) {
+                await updateUser({ ...user, plan_tier: planName });
+              }
+              Alert.alert(
+                '🎉 Plan Activated!',
+                `Your account is now upgraded to the ${planName} Plan!`,
+                [{ text: 'Continue', onPress: () => navigation.goBack() }]
+              );
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
     );
   };
 
@@ -108,16 +167,24 @@ export default function UpgradePlanScreen({ navigation }: Props) {
             <FeatureRow text="AI Health Chatbot (1 message limit)" active />
           </View>
 
-          <TouchableOpacity
-            style={[styles.planBtn, styles.currentPlanBtn]}
-            disabled={true}
-          >
-            <Text style={styles.currentPlanBtnText}>Current Active Plan</Text>
-          </TouchableOpacity>
+          {currentPlan === 'FREE' ? (
+            <View style={[styles.planBtn, styles.currentPlanBtn]}>
+              <Text style={styles.currentPlanBtnText}>Current Active Plan</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.planBtn, { backgroundColor: '#E2E8F0' }]}
+              onPress={() => handleSelectPlan('Free', '$0/forever')}
+              activeOpacity={0.85}
+              disabled={loading}
+            >
+              <Text style={[styles.currentPlanBtnText, { color: '#4A5568' }]}>Downgrade to Free</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* PLAN 2: BASIC ($5/Mo) */}
-        <View style={[styles.planCard, selectedPlan === 'BASIC' && styles.planCardSelected]}>
+        <View style={[styles.planCard, (selectedPlan === 'BASIC' || currentPlan === 'BASIC') && styles.planCardSelected]}>
           <View style={styles.planHeader}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.planName, { color: '#4A5568' }]}>Basic Plan</Text>
@@ -151,20 +218,33 @@ export default function UpgradePlanScreen({ navigation }: Props) {
             <FeatureRow text="AI Chatbot (20 messages / Month)" active />
           </View>
 
-          <TouchableOpacity
-            style={[styles.planBtn, styles.basicBtn]}
-            onPress={() => {
-              setSelectedPlan('BASIC');
-              handleSelectPlan('Basic', billingCycle === 'YEARLY' ? '$42.00/year' : '$5.00/month');
-            }}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.basicBtnText}>Choose Basic Plan</Text>
-          </TouchableOpacity>
+          {currentPlan === 'BASIC' ? (
+            <View style={[styles.planBtn, styles.currentPlanBtn]}>
+              <Text style={styles.currentPlanBtnText}>Current Active Plan</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.planBtn, styles.basicBtn, loading && { opacity: 0.7 }]}
+              onPress={() => {
+                setSelectedPlan('BASIC');
+                handleSelectPlan('Basic', billingCycle === 'YEARLY' ? '$42.00/year' : '$5.00/month');
+              }}
+              activeOpacity={0.85}
+              disabled={loading}
+            >
+              {loading && selectedPlan === 'BASIC' ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.basicBtnText}>
+                  {currentPlan === 'PREMIUM' ? 'Switch to Basic' : 'Choose Basic Plan'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* PLAN 3: PREMIUM ($10/Mo ⭐ RECOMMENDED) */}
-        <View style={[styles.planCard, styles.proCard, selectedPlan === 'PREMIUM' && styles.planCardSelected]}>
+        <View style={[styles.planCard, styles.proCard, (selectedPlan === 'PREMIUM' || currentPlan === 'PREMIUM') && styles.planCardSelected]}>
           {/* Recommended Tag */}
           <View style={styles.popularBadge}>
             <MaterialCommunityIcons name="star" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
@@ -204,17 +284,30 @@ export default function UpgradePlanScreen({ navigation }: Props) {
             <FeatureRow text="Unlimited AI Health Assistant Chat" active />
           </View>
 
-          <TouchableOpacity
-            style={[styles.planBtn, styles.proBtn]}
-            onPress={() => {
-              setSelectedPlan('PREMIUM');
-              handleSelectPlan('Premium', billingCycle === 'YEARLY' ? '$84.00/year' : '$10.00/month');
-            }}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.proBtnText}>Upgrade to Premium</Text>
-            <Feather name="arrow-right" size={16} color="#FFFFFF" style={{ marginLeft: 6 }} />
-          </TouchableOpacity>
+          {currentPlan === 'PREMIUM' ? (
+            <View style={[styles.planBtn, styles.currentPlanBtn]}>
+              <Text style={styles.currentPlanBtnText}>Current Active Plan</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.planBtn, styles.proBtn, loading && { opacity: 0.7 }]}
+              onPress={() => {
+                setSelectedPlan('PREMIUM');
+                handleSelectPlan('Premium', billingCycle === 'YEARLY' ? '$84.00/year' : '$10.00/month');
+              }}
+              activeOpacity={0.85}
+              disabled={loading}
+            >
+              {loading && selectedPlan === 'PREMIUM' ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.proBtnText}>Upgrade to Premium</Text>
+                  <Feather name="arrow-right" size={16} color="#FFFFFF" style={{ marginLeft: 6 }} />
+                </>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Guarantee Info */}

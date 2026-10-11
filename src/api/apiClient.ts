@@ -94,6 +94,7 @@ export const apiAuth = {
 export const apiProfile = {
   getProfile: () => apiRequest('/profile', 'GET'),
   updateProfile: (data: any) => apiRequest('/profile/update', 'PUT', data),
+  upgradePlan: (plan: string) => apiRequest('/profile/upgrade-plan', 'POST', { plan }),
   changePassword: (data: any) => apiRequest('/profile/password', 'POST', data),
   deleteAccount: () => apiRequest('/profile/account', 'DELETE'),
 };
