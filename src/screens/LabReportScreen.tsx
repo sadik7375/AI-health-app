@@ -156,10 +156,10 @@ export default function LabReportScreen({ navigation }: Props) {
         return rDate.getMonth() === currentMonth && rDate.getFullYear() === currentYear;
       }).length;
 
-      if (monthlyScans >= 30) {
+      if (monthlyScans >= 20) {
         Alert.alert(
           'Monthly Limit Reached',
-          'Premium plan is limited to 30 lab report scans per month.',
+          'Premium plan is limited to 20 lab report scans per month.',
           [{ text: 'OK' }]
         );
         return false;

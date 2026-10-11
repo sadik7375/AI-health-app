@@ -105,17 +105,8 @@ export default function AIHealthAssistantScreen({ navigation }: Props) {
         }
         await AsyncStorage.setItem(monthKey, (count + 1).toString());
       } else if (plan === 'premium' || plan === 'family') {
-        const stored = await AsyncStorage.getItem(monthKey);
-        const count = stored ? parseInt(stored, 10) : 0;
-        if (count >= 30) {
-          Alert.alert(
-            'Monthly Limit Reached',
-            'Premium plan is limited to 30 AI Assistant messages per month.',
-            [{ text: 'OK' }]
-          );
-          return false;
-        }
-        await AsyncStorage.setItem(monthKey, (count + 1).toString());
+        // Unlimited AI Health Assistant chat for Premium users
+        return true;
       }
     } catch (_) {}
     return true;

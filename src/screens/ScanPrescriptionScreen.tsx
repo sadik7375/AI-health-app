@@ -57,10 +57,10 @@ export default function ScanPrescriptionScreen({ navigation }: Props) {
         return pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear;
       }).length;
 
-      if (monthlyScans >= 30) {
+      if (monthlyScans >= 20) {
         Alert.alert(
           'Monthly Limit Reached',
-          'Premium plan is limited to 30 prescription scans per month.',
+          'Premium plan is limited to 20 prescription scans per month.',
           [{ text: 'OK' }]
         );
         return false;

@@ -99,13 +99,13 @@ export default function UpgradePlanScreen({ navigation }: Props) {
           <View style={styles.divider} />
 
           <View style={styles.featureList}>
-            <FeatureRow text="10 Prescription Scans per account" active />
-            <FeatureRow text="10 Lab Report Scans per account" active />
+            <FeatureRow text="2 Prescription Scans per account" active />
+            <FeatureRow text="2 Lab Report Scans per account" active />
             <FeatureRow text="Active Medicine Reminders" active />
             <FeatureRow text="Prescription Document History" active />
-            <FeatureRow text="Unlimited Manual Appointments" active />
+            <FeatureRow text="2 Doctor Appointments" active />
             <FeatureRow text="Voice Appointment Bookings" active={false} />
-            <FeatureRow text="AI Health Chatbot (1 message limit)" active={false} />
+            <FeatureRow text="AI Health Chatbot (1 message limit)" active />
           </View>
 
           <TouchableOpacity
@@ -195,13 +195,13 @@ export default function UpgradePlanScreen({ navigation }: Props) {
           <View style={styles.divider} />
 
           <View style={styles.featureList}>
-            <FeatureRow text="30 Prescription Scans / Month" active />
-            <FeatureRow text="30 Lab Report Scans / Month" active />
+            <FeatureRow text="20 Prescription Scans / Month" active />
+            <FeatureRow text="20 Lab Report Scans / Month" active />
             <FeatureRow text="Active Medicine Reminders" active />
             <FeatureRow text="Prescription Document History" active />
             <FeatureRow text="Unlimited Manual Appointments" active />
             <FeatureRow text="Voice Appointment Bookings" active />
-            <FeatureRow text="AI Chatbot (30 messages / Month)" active />
+            <FeatureRow text="Unlimited AI Health Assistant Chat" active />
           </View>
 
           <TouchableOpacity
